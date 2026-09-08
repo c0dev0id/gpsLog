@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,48 +66,50 @@ fun GpsLogScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text("gpsLog") }) }
     ) { padding ->
-        Column(
+        // One lazy list for the whole screen so the controls scroll with the runs
+        // (in landscape the list would otherwise start below the visible area).
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(padding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StartStopButton(isLogging = state.isLogging, onStart = vm::start, onStop = vm::stop)
-
-            if (state.isLogging) {
-                LiveStats(state)
+            item(key = "start") {
+                StartStopButton(isLogging = state.isLogging, onStart = vm::start, onStop = vm::stop)
             }
-
-            FilterControls(
-                filters = filters,
-                onAccuracy = vm::setAccuracyMeters,
-                onDistance = vm::setDistanceMeters,
-                onTime = vm::setTimeSeconds,
-            )
-
-            ExportControls(
-                selectedCount = selected.size,
-                onSave = onSave,
-                onShare = onShare,
-            )
-
-            HorizontalDivider()
-            Text("Runs", style = MaterialTheme.typography.titleMedium)
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(runs, key = { it.id }) { run ->
-                    RunRow(
-                        run = run,
-                        selected = run.id in selected,
-                        isActive = run.id == state.runId && state.isLogging,
-                        onToggleSelect = { vm.toggleSelect(run.id) },
-                        onDelete = { vm.delete(run.id) },
-                    )
+            if (state.isLogging) {
+                item(key = "stats") { LiveStats(state) }
+            }
+            item(key = "filters") {
+                FilterControls(
+                    filters = filters,
+                    onAccuracy = vm::setAccuracyMeters,
+                    onDistance = vm::setDistanceMeters,
+                    onTime = vm::setTimeSeconds,
+                )
+            }
+            item(key = "export") {
+                ExportControls(
+                    selectedCount = selected.size,
+                    onSave = onSave,
+                    onShare = onShare,
+                )
+            }
+            item(key = "runs-header") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HorizontalDivider()
+                    Text("Runs", style = MaterialTheme.typography.titleMedium)
                 }
+            }
+            items(runs, key = { it.id }) { run ->
+                RunRow(
+                    run = run,
+                    selected = run.id in selected,
+                    isActive = run.id == state.runId && state.isLogging,
+                    onToggleSelect = { vm.toggleSelect(run.id) },
+                    onDelete = { vm.delete(run.id) },
+                )
             }
         }
     }
@@ -117,8 +120,7 @@ private fun StartStopButton(isLogging: Boolean, onStart: () -> Unit, onStop: () 
     Button(
         onClick = { if (isLogging) onStop() else onStart() },
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+            .fillMaxWidth(),
         colors = if (isLogging) {
             ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
         } else {
