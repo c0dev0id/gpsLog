@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic resume of an interrupted run after a process kill or device reboot; logging continues until the user stops it
 - Requests all permissions and a battery-optimization exemption on launch so the service is not deferred or killed by the OS
 - Adaptive launcher icon (with a monochrome layer for themed icons) and a matching notification icon
-- Live stats show the GPS state (disabled / no fix / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
+- Live stats show the GPS state (disabled / receiver off / searching / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
 
 ### Changed
 - Raised minimum supported version to Android 14 (`minSdk` 26 → 34)

@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import de.codevoid.gpslog.App
 import de.codevoid.gpslog.MainActivity
 import de.codevoid.gpslog.R
@@ -131,7 +132,9 @@ class LoggingService : Service() {
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, 0L, 0f, listener, handlerThread.looper,
             )
-            locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)
+            if (!locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)) {
+                Log.w(TAG, "GnssStatus callback not registered; satellite info unavailable")
+            }
         } catch (e: SecurityException) {
             stopLoggingInternal(clearActive = true)
             return
@@ -146,13 +149,21 @@ class LoggingService : Service() {
     }
 
     private val gnssCallback = object : GnssStatus.Callback() {
+        override fun onStarted() {
+            LoggingStateHolder.update { it.copy(gnssRunning = true) }
+        }
+
+        override fun onStopped() {
+            LoggingStateHolder.update {
+                it.copy(gnssRunning = false, satellitesVisible = 0, satellitesUsedInFix = 0)
+            }
+        }
+
         override fun onSatelliteStatusChanged(status: GnssStatus) {
             var used = 0
             for (i in 0 until status.satelliteCount) if (status.usedInFix(i)) used++
             onGnssStatus(visible = status.satelliteCount, usedInFix = used)
         }
-
-        override fun onStopped() = onGnssStatus(visible = 0, usedInFix = 0)
     }
 
     private fun setGpsEnabled(enabled: Boolean) {
@@ -161,7 +172,9 @@ class LoggingService : Service() {
 
     /** ~1 Hz from the GNSS engine; drives the notification only while there is no fix. */
     private fun onGnssStatus(visible: Int, usedInFix: Int) {
-        LoggingStateHolder.update { it.copy(satellitesVisible = visible, satellitesUsedInFix = usedInFix) }
+        LoggingStateHolder.update {
+            it.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
+        }
         if (usedInFix > 0) return
         val nowMs = SystemClock.elapsedRealtime()
         if (nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS) {
@@ -288,6 +301,7 @@ class LoggingService : Service() {
         const val ACTION_STOP = "de.codevoid.gpslog.action.STOP"
         const val ACTION_RESUME = "de.codevoid.gpslog.action.RESUME"
 
+        private const val TAG = "LoggingService"
         private const val CHANNEL_ID = "logging"
         private const val NOTIF_ID = 1
         private const val FLUSH_INTERVAL_MS = 10_000L
