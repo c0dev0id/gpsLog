@@ -57,8 +57,10 @@ fun GpsLogScreen(
     vm: MainViewModel,
     onSave: () -> Unit,
     onShare: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val state by vm.loggingState.collectAsStateWithLifecycle()
+    val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val runs by vm.runs.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
@@ -75,8 +77,16 @@ fun GpsLogScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (!preciseLocation) {
+                item(key = "precise") { PreciseLocationBanner(onOpenSettings) }
+            }
             item(key = "start") {
-                StartStopButton(isLogging = state.isLogging, onStart = vm::start, onStop = vm::stop)
+                StartStopButton(
+                    isLogging = state.isLogging,
+                    enabled = preciseLocation || state.isLogging,
+                    onStart = vm::start,
+                    onStop = vm::stop,
+                )
             }
             if (state.isLogging) {
                 item(key = "stats") { LiveStats(state) }
@@ -115,10 +125,33 @@ fun GpsLogScreen(
     }
 }
 
+/**
+ * Without precise location Android silently degrades GPS_PROVIDER to fuzzed fixes every 10 min
+ * and never delivers GnssStatus, so logging is pointless; say so instead of starting a dead run.
+ */
 @Composable
-private fun StartStopButton(isLogging: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
+private fun PreciseLocationBanner(onOpenSettings: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Precise location is required. Allow \"Precise\" location for gpsLog in the system settings.",
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            OutlinedButton(onClick = onOpenSettings) { Text("Open app settings") }
+        }
+    }
+}
+
+@Composable
+private fun StartStopButton(isLogging: Boolean, enabled: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
     Button(
         onClick = { if (isLogging) onStop() else onStart() },
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth(),
         colors = if (isLogging) {

@@ -1,5 +1,6 @@
 package de.codevoid.gpslog.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.GnssStatus
 import android.location.Location
@@ -111,6 +113,13 @@ class LoggingService : Service() {
     }
 
     private fun startLogging(id: Long) {
+        // Coarse-only access does not throw: GPS_PROVIDER is silently fuzzed and throttled to one
+        // fix per 10 min and GnssStatus never fires. Refuse rather than record a dead run.
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "precise location not granted; refusing to log")
+            stopLoggingInternal(clearActive = true)
+            return
+        }
         val file = runs.runFile(id)
         runId = id
         pointCount = RunReader.pointCount(file)
