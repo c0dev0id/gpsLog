@@ -145,8 +145,9 @@ private fun LiveStats(state: LoggingState) {
                 "GPS",
                 when {
                     !state.gpsEnabled -> "Disabled"
+                    !state.gnssRunning -> "Receiver off"
                     state.hasFix -> "Fix"
-                    else -> "No fix"
+                    else -> "Searching"
                 },
                 highlight = state.gpsEnabled && state.hasFix,
             )

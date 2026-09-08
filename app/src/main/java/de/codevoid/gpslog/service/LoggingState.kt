@@ -17,6 +17,8 @@ data class LoggingState(
     val accuracyMeters: Float? = null,
     /** False when the GPS provider is switched off in system settings. */
     val gpsEnabled: Boolean = true,
+    /** True between GnssStatus.Callback.onStarted and onStopped, i.e. the receiver is powered. */
+    val gnssRunning: Boolean = false,
     val satellitesVisible: Int = 0,
     val satellitesUsedInFix: Int = 0,
 ) {
