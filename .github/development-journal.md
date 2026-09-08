@@ -34,6 +34,9 @@ At API 34 the runtime `POST_NOTIFICATIONS` permission, `FOREGROUND_SERVICE_LOCAT
 **`LocationManager` + `GPS_PROVIDER`, not FusedLocationProvider.**
 FusedLocationProvider is a Play Services dependency, caps at roughly 1 Hz and smooths fixes. Raw chipset-rate logging (device-dependent, up to ~10–20 Hz) requires `requestLocationUpdates(minTime=0, minDistance=0)` on the platform provider. Fixes are delivered on a dedicated `HandlerThread`, never the main Looper.
 
+**Fix status comes from `GnssStatus`, not from fix age.**
+A `GnssStatus.Callback` is registered next to the location updates (same handler thread, ~1 Hz from the engine). "Has fix" is defined as at least one satellite flagged `usedInFix`; this is the platform's own notion, updates even while no `Location` arrives, and needs no timer to expire a stale fix. Provider on/off is taken from `LocationListener.onProviderEnabled/Disabled`. The per-fix state update copies the existing `LoggingState` so these fields survive.
+
 **One append-only fixed-size binary file per run, not a database.**
 Each run is `filesDir/runs/<startMillis>.dat`: a 16-byte header plus 68-byte records with a validity bitmask (absent optional fields written as NaN sentinels). Point count is `(size − header) / recordSize` in O(1); a torn trailing partial record is ignored for crash safety. No end marker — a graceful stop and a crash are indistinguishable, and interrupted runs are just runs. This honours the pre-1.0 "no schema/migration code" rule.
 
