@@ -4,4 +4,5 @@
     <string name="notif_channel">GPS logging</string>
     <string name="notif_starting">Starting…</string>
     <string name="notif_logging">%1$d points · %2$s Hz</string>
+    <string name="notif_no_fix">Waiting for GPS fix · %1$d satellites</string>
 </resources>
