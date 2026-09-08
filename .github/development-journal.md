@@ -25,8 +25,8 @@ AGP 9.1 registers the `compileDebugKotlin` task and the `kotlin { }` extension o
 **Version metadata is a Gradle property, sourced from the release tag.**
 The release workflow resolves the tag, derives `versionCode` as `major * 10000 + minor * 100 + patch`, and passes both via `-P` flags.
 
-**Lint and the debug build share one CI job.**
-Running lint and assembleDebug in one job avoids duplicated Gradle distribution downloads and cache concurrency issues.
+**Every push to `main` publishes a signed `dev` pre-release.**
+`build.yml` runs lint and unit tests, then builds a *signed release* APK (`versionName = dev-<short-sha>`) and publishes it as a single rolling `dev` GitHub pre-release, deleting and recreating it each run so there is always exactly one current dev artifact. Signing is real (env-var driven), so the pre-release depends on the `SIGNING_*` secrets being present. Modelled on `c0dev0id/androsnd`; the `andro-template` workflow it was originally scaffolded from is outdated. `release.yml` (manual `workflow_dispatch` → tagged draft release) is kept separate and is not the day-to-day path.
 
 **minSdk raised to 34 to delete all compatibility code.**
 At API 34 the runtime `POST_NOTIFICATIONS` permission, `FOREGROUND_SERVICE_LOCATION`, the 3-arg `startForeground`, and the `LocationManager` `Executor`/`Looper` overloads are all unconditionally available, so no `androidx.core` compat layer or version guards are needed. Android 13 and older are unsupported by design.

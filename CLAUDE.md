@@ -20,25 +20,27 @@ Gradle tasks the workflows invoke (for reference, not for local use):
 | Task | Command |
 |---|---|
 | Lint | `./gradlew lint` |
-| Debug APK | `./gradlew assembleDebug` |
-| Signed release APK | `./gradlew assembleRelease -PversionName=… -PversionCode=…` |
+| Unit tests | `./gradlew test` |
+| Signed release APK | `./gradlew assembleRelease -PversionName=…` |
 
 Pure-JVM unit tests (`./gradlew test`) cover `RunCodec` and `PointFilter` —
 the two Android-free modules that carry the highest on-paper risk. Keep them
 Android-free so CI can verify them without an emulator. There are no
 instrumentation tests.
 
-| CI task | Trigger |
-|---|---|
-| Lint + debug APK | Push to `main`, PR labeled `run-build`, or `workflow_dispatch` |
-| Signed release APK + GitHub draft release | Manual `workflow_dispatch` |
+| Workflow | Trigger | Outcome |
+|---|---|---|
+| `build.yml` | Push to `main` | Lint, unit tests, and a **signed release APK** published as the `dev` pre-release — a single rolling snapshot that is deleted and recreated on every run (`versionName` = `dev-<short-sha>`) |
+| `release.yml` | Manual `workflow_dispatch` | Signed release APK, a version tag, and a GitHub **draft** release (`versionName` from the resolved tag) |
 
 Signing secrets required: `SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`.
 
-The release workflow derives `versionName`/`versionCode` from the release tag
-and passes them to Gradle as `-PversionName` / `-PversionCode`. Release signing
-is configured from the `SIGNING_*` environment variables; when they are absent
-the release build stays unsigned.
+Release signing is configured from the `SIGNING_*` environment variables in
+`app/build.gradle.kts`; when they are absent the signing config is not created
+and the release build stays unsigned (so the `dev` pre-release genuinely
+depends on the secrets being present). `build.yml` passes only `versionName`
+(the `versionCode` falls back to its default); `release.yml` derives the
+version from the tag.
 
 ## Architecture
 
