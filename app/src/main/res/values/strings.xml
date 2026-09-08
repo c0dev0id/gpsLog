@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">gpsLog</string>
+    <string name="notif_channel">GPS logging</string>
+    <string name="notif_starting">Starting…</string>
+    <string name="notif_logging">%1$d points · %2$s Hz</string>
 </resources>
