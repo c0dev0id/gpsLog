@@ -139,6 +139,16 @@ private fun LiveStats(state: LoggingState) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Stat("Started", state.startTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
+            Stat(
+                "GPS",
+                when {
+                    !state.gpsEnabled -> "Disabled"
+                    state.hasFix -> "Fix"
+                    else -> "No fix"
+                },
+                highlight = state.gpsEnabled && state.hasFix,
+            )
+            Stat("Satellites", "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible")
             Stat("Points", state.pointCount.toString())
             Stat("Rate", String.format(Locale.US, "%.1f Hz", state.updateRateHz))
             Stat("GPS time", state.lastFixTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
@@ -148,11 +158,19 @@ private fun LiveStats(state: LoggingState) {
     }
 }
 
+/** [highlight] null keeps the default colour; true/false colour the value as good/bad. */
 @Composable
-private fun Stat(label: String, value: String) {
+private fun Stat(label: String, value: String, highlight: Boolean? = null) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = MaterialTheme.colorScheme.outline)
-        Text(value)
+        Text(
+            value,
+            color = when (highlight) {
+                null -> Color.Unspecified
+                true -> MaterialTheme.colorScheme.primary
+                false -> MaterialTheme.colorScheme.error
+            },
+        )
     }
 }
 
