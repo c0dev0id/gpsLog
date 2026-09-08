@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persisted export filters: accuracy (default 10 m), distance (default off) and time (default off), applied accuracy-first then distance/time with distance taking precedence
 - Automatic resume of an interrupted run after a process kill or device reboot; logging continues until the user stops it
 - Requests all permissions and a battery-optimization exemption on launch so the service is not deferred or killed by the OS
+- Live stats show the GPS state (disabled / no fix / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
 
 ### Changed
 - Raised minimum supported version to Android 14 (`minSdk` 26 → 34)
