@@ -1,51 +1,110 @@
 package de.codevoid.gpslog
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.core.content.FileProvider
+import de.codevoid.gpslog.ui.GpsLogScreen
+import de.codevoid.gpslog.ui.MainViewModel
+import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
+
+    private val vm: MainViewModel by viewModels()
+
+    private var pendingShare = false
+
+    private val requestForeground = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val fineOrCoarse = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineOrCoarse) requestBackground.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        else requestBatteryExemption()
+    }
+
+    private val requestBackground = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { requestBatteryExemption() }
+
+    private val createDocument = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/gpx+xml")
+    ) { uri: Uri? ->
+        uri ?: return@registerForActivityResult
+        contentResolver.openOutputStream(uri)?.let { out -> vm.exportSelected(out) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestPermissionsUpFront()
         setContent {
             MaterialTheme {
-                GpsLogScreen()
+                GpsLogScreen(
+                    vm = vm,
+                    onSave = { createDocument.launch(suggestedName()) },
+                    onShare = { exportForShare() },
+                )
             }
         }
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GpsLogScreen() {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("gpsLog") }) }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text("gpsLog", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "GPS Logging Service",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
+    override fun onResume() {
+        super.onResume()
+        vm.refreshRuns()
+    }
+
+    private fun requestPermissionsUpFront() {
+        val perms = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        requestForeground.launch(perms.toTypedArray())
+    }
+
+    private fun requestBatteryExemption() {
+        val pm = getSystemService(PowerManager::class.java)
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }
+    }
+
+    private fun exportForShare() {
+        val dir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(dir, suggestedName())
+        vm.exportSelected(file.outputStream()) {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/gpx+xml"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, "Share GPX"))
+        }
+    }
+
+    private fun suggestedName(): String =
+        "gpslog-${FILE_FMT.format(Instant.now())}.gpx"
+
+    private companion object {
+        val FILE_FMT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneId.systemDefault())
     }
 }
