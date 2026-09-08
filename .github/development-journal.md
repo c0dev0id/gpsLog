@@ -4,8 +4,11 @@
 
 - **Language:** Kotlin
 - **UI:** Jetpack Compose (Material3), Compose BOM 2026.02.01
-- **Min SDK:** 26 (Android 8.0)
+- **Min SDK:** 34 (Android 14)
 - **Target/Compile SDK:** 36
+- **Location:** platform `LocationManager` + `GPS_PROVIDER` (no Play Services / FusedLocationProvider)
+- **Persistence:** per-run append-only fixed-size binary files + `SharedPreferences` (no Room, no DataStore)
+- **State sharing:** `Application`-scoped singleton + `StateFlow` (no DI framework)
 - **Build:** CI-only via GitHub Actions (Gradle 9.4.0, AGP 9.1.0, Kotlin Compose plugin 2.3.10, JDK 17)
 
 ## Key Decisions
@@ -25,8 +28,29 @@ The release workflow resolves the tag, derives `versionCode` as `major * 10000 +
 **Lint and the debug build share one CI job.**
 Running lint and assembleDebug in one job avoids duplicated Gradle distribution downloads and cache concurrency issues.
 
+**minSdk raised to 34 to delete all compatibility code.**
+At API 34 the runtime `POST_NOTIFICATIONS` permission, `FOREGROUND_SERVICE_LOCATION`, the 3-arg `startForeground`, and the `LocationManager` `Executor`/`Looper` overloads are all unconditionally available, so no `androidx.core` compat layer or version guards are needed. Android 13 and older are unsupported by design.
+
+**`LocationManager` + `GPS_PROVIDER`, not FusedLocationProvider.**
+FusedLocationProvider is a Play Services dependency, caps at roughly 1 Hz and smooths fixes. Raw chipset-rate logging (device-dependent, up to ~10–20 Hz) requires `requestLocationUpdates(minTime=0, minDistance=0)` on the platform provider. Fixes are delivered on a dedicated `HandlerThread`, never the main Looper.
+
+**One append-only fixed-size binary file per run, not a database.**
+Each run is `filesDir/runs/<startMillis>.dat`: a 16-byte header plus 68-byte records with a validity bitmask (absent optional fields written as NaN sentinels). Point count is `(size − header) / recordSize` in O(1); a torn trailing partial record is ignored for crash safety. No end marker — a graceful stop and a crash are indistinguishable, and interrupted runs are just runs. This honours the pre-1.0 "no schema/migration code" rule.
+
+**In-memory buffer flushed and `fd.sync()`ed every 10 s.**
+Bounds data loss on an unexpected kill to at most the last flush interval while keeping per-fix write cost low. A `PARTIAL_WAKE_LOCK` is held for the run so Doze/CPU-suspend cannot defer the flush timer.
+
+**Auto-resume via persisted active-run flag + START_STICKY + BOOT_COMPLETED.**
+The active run id is written to `SharedPreferences` on start and cleared on stop. A system-driven restart (`START_STICKY`, null intent) and a reboot (`BootReceiver`) both re-open the same file in append mode and keep logging until the user taps Stop. A battery-optimization exemption is requested so the OS leaves the service alone; both the exemption and receiving `BOOT_COMPLETED` are background-FGS-start exemptions (OEM aggressiveness still varies). A user-initiated Force-Stop is a permanent OS stop and is not resumed, by design.
+
+**Export filters: accuracy first, then distance/time with "distance beats time".**
+Accuracy always drops missing/worse fixes. When distance > 0 the decision is governed entirely by distance (minimum spacing from the last kept point); time only governs cadence when distance is 0. Both off keeps all accuracy-passing points. `PointFilter` and `RunCodec` are pure Kotlin so they are unit-tested on the JVM in CI — they carry the highest on-paper risk.
+
+**GPX written with the built-in `android.util.Xml` serializer, streamed to the output.**
+No XML library. One `<trk>` per run; a new `<trkseg>` is started across gaps larger than 60 s (e.g. a reboot pause) so viewers don't draw a straight line over the gap.
+
 ## Core Features
 
-None implemented yet. Planned:
-
-- GPS Logging Service
+- **GPS logging foreground service** — records raw fixes at the chipset rate, survives Doze, resumes after process kill or reboot.
+- **Single configuration screen** — start/stop, live stats, and the past-runs list with swipe-to-delete / swipe-to-select.
+- **GPX export** — selected runs saved via SAF or shared via the system share sheet, with persisted accuracy/distance/time filters.

@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **gpsLog** — an Android GPS logging service.
 
-**Status:** Boilerplate only. The template scaffold is complete (package
-`de.codevoid.gpslog`); the app builds and shows a placeholder Compose
-screen.
+**Status:** Core app implemented (package `de.codevoid.gpslog`): a foreground
+logging service, per-run binary storage, a single Compose screen (start/stop,
+live stats, runs list), and GPX export. Not yet exercised on a device.
 
 ## Build & CI
 
@@ -23,8 +23,10 @@ Gradle tasks the workflows invoke (for reference, not for local use):
 | Debug APK | `./gradlew assembleDebug` |
 | Signed release APK | `./gradlew assembleRelease -PversionName=… -PversionCode=…` |
 
-There is no test suite yet (no `src/test` or `src/androidTest`), so there is
-nothing to run for unit or instrumentation tests.
+Pure-JVM unit tests (`./gradlew test`) cover `RunCodec` and `PointFilter` —
+the two Android-free modules that carry the highest on-paper risk. Keep them
+Android-free so CI can verify them without an emulator. There are no
+instrumentation tests.
 
 | CI task | Trigger |
 |---|---|
@@ -41,10 +43,35 @@ the release build stays unsigned.
 ## Architecture
 
 - **Single Activity** (`MainActivity`) — no fragments, no navigation component.
+  It requests all permissions and the battery-optimization exemption up front
+  and hosts the one Compose screen (`ui/GpsLogScreen`).
 - **Jetpack Compose** UI only — no XML layouts.
-- **minSdk 26** (Android 8.0) — no need for pre-Oreo compatibility paths.
+- **minSdk 34** (Android 14). Chosen so that all runtime permissions, the
+  `FOREGROUND_SERVICE_LOCATION` type, the 3-arg `startForeground`, and the
+  `LocationManager` `Executor`/`Looper` overloads are unconditionally
+  available — **no compatibility code or version guards**. Do not reintroduce
+  `androidx.core` compat shims. Android 13 and older are unsupported by design.
+- **Logging** is a foreground service (`service/LoggingService`, type
+  `location`, `START_STICKY`) using the platform `LocationManager` +
+  `GPS_PROVIDER` on a dedicated `HandlerThread` — **not** FusedLocationProvider
+  (Play Services dep, ~1 Hz cap, smoothing). It holds a `PARTIAL_WAKE_LOCK` for
+  the run and resumes an interrupted run on process restart or reboot
+  (`service/BootReceiver` + a persisted active-run flag in `SettingsStore`).
+- **Storage** is one append-only fixed-size binary file per run under
+  `filesDir/runs/<startMillis>.dat` (`data/RunCodec`, `data/RunFile`,
+  `data/RunRepository`) — no Room, no DataStore. Per the pre-1.0 rule there is
+  **no schema or migration code**; readers tolerate a torn trailing record.
+- **State** is shared through an `Application`-scoped singleton
+  (`App` + `service/LoggingStateHolder` `StateFlow`) — no DI framework. The
+  service writes; `ui/MainViewModel` collects.
+- **Settings** (three export filters + active-run marker) live in
+  `SharedPreferences` via `data/SettingsStore`.
+- **GPX** is written with the built-in `android.util.Xml` serializer
+  (`export/GpxExporter`), streamed to the output; filtering is pure Kotlin in
+  `export/PointFilter`.
 - The Compose BOM only manages the `androidx.compose.*` groups. Any other
-  AndroidX dependency (e.g. `activity-compose`) needs an explicit version.
+  AndroidX dependency (e.g. `activity-compose`, `lifecycle-*`) needs an
+  explicit version.
 - **AGP 9.1's built-in Kotlin support is used** — only `com.android.application`
   and the Compose compiler plugin are applied. Do not add the `kotlin-android`
   plugin; AGP registers the Kotlin tasks and `kotlin { }` extension itself.
