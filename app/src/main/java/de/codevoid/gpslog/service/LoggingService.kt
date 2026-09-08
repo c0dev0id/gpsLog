@@ -273,7 +273,7 @@ class LoggingService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setSmallIcon(R.drawable.ic_stat_logging)
             .setOngoing(true)
             .setContentIntent(tap)
             .build()
