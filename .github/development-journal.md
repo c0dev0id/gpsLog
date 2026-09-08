@@ -34,6 +34,9 @@ At API 34 the runtime `POST_NOTIFICATIONS` permission, `FOREGROUND_SERVICE_LOCAT
 **`LocationManager` + `GPS_PROVIDER`, not FusedLocationProvider.**
 FusedLocationProvider is a Play Services dependency, caps at roughly 1 Hz and smooths fixes. Raw chipset-rate logging (device-dependent, up to ~10–20 Hz) requires `requestLocationUpdates(minTime=0, minDistance=0)` on the platform provider. Fixes are delivered on a dedicated `HandlerThread`, never the main Looper.
 
+**Launcher icon is vector-only, no PNG density buckets.**
+`mipmap-anydpi/ic_launcher.xml` is an adaptive icon whose background (gradient), foreground and monochrome layers are all `VectorDrawable`s under `res/drawable/`. With minSdk 34 every device supports adaptive icons, so no legacy `mipmap-*dpi` PNGs exist and the folder carries no `-v26` qualifier. The notification small icon `ic_stat_logging` is the same path data cropped to the 66dp safe zone. The SVG source of truth is the path data itself; regenerate previews by rendering the drawables' `pathData` in an SVG.
+
 **Fix status comes from `GnssStatus`, not from fix age.**
 A `GnssStatus.Callback` is registered next to the location updates (same handler thread, ~1 Hz from the engine). "Has fix" is defined as at least one satellite flagged `usedInFix`; this is the platform's own notion, updates even while no `Location` arrives, and needs no timer to expire a stale fix. Provider on/off is taken from `LocationListener.onProviderEnabled/Disabled`. The per-fix state update copies the existing `LoggingState` so these fields survive.
 
