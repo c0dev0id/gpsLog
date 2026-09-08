@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -31,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -207,7 +207,7 @@ private fun IntFilterField(
         },
         label = { Text(label) },
         singleLine = true,
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier,
     )
 }
@@ -228,7 +228,7 @@ private fun FloatFilterField(
         },
         label = { Text(label) },
         singleLine = true,
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = modifier,
     )
 }
@@ -261,7 +261,6 @@ private fun RunRow(
     onToggleSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val activeNow by rememberUpdatedState(isActive)
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
@@ -270,7 +269,8 @@ private fun RunRow(
                     false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    if (activeNow) false else { onDelete(); true }
+                    onDelete()
+                    true
                 }
                 SwipeToDismissBoxValue.Settled -> false
             }

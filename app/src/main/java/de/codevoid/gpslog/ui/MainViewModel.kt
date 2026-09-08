@@ -35,10 +35,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _selected = MutableStateFlow<Set<Long>>(emptySet())
     val selected = _selected.asStateFlow()
 
-    init {
-        refreshRuns()
-    }
-
     fun refreshRuns() {
         viewModelScope.launch {
             _runs.value = withContext(Dispatchers.IO) { repo.listRuns() }

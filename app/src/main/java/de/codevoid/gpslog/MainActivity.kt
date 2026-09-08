@@ -25,8 +25,6 @@ class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()
 
-    private var pendingShare = false
-
     private val requestForeground = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
@@ -41,7 +39,7 @@ class MainActivity : ComponentActivity() {
     ) { requestBatteryExemption() }
 
     private val createDocument = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/gpx+xml")
+        ActivityResultContracts.CreateDocument(MIME_GPX)
     ) { uri: Uri? ->
         uri ?: return@registerForActivityResult
         contentResolver.openOutputStream(uri)?.let { out -> vm.exportSelected(out) }
@@ -92,7 +90,7 @@ class MainActivity : ComponentActivity() {
         vm.exportSelected(file.outputStream()) {
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = "application/gpx+xml"
+                type = MIME_GPX
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -104,6 +102,7 @@ class MainActivity : ComponentActivity() {
         "gpslog-${FILE_FMT.format(Instant.now())}.gpx"
 
     private companion object {
+        const val MIME_GPX = "application/gpx+xml"
         val FILE_FMT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneId.systemDefault())
     }
