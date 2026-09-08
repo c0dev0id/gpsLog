@@ -37,6 +37,9 @@ FusedLocationProvider is a Play Services dependency, caps at roughly 1 Hz and sm
 **Launcher icon is vector-only, no PNG density buckets.**
 `mipmap-anydpi/ic_launcher.xml` is an adaptive icon whose background (gradient), foreground and monochrome layers are all `VectorDrawable`s under `res/drawable/`. With minSdk 34 every device supports adaptive icons, so no legacy `mipmap-*dpi` PNGs exist and the folder carries no `-v26` qualifier. The notification small icon `ic_stat_logging` is the same path data cropped to the 66dp safe zone. The SVG source of truth is the path data itself; regenerate previews by rendering the drawables' `pathData` in an SVG.
 
+**Precise (fine) location is mandatory and checked explicitly.**
+Since Android 12 a coarse-only app may still request `GPS_PROVIDER`; nothing throws, but fixes are fuzzed and throttled to one per 10 minutes and `GnssStatus` callbacks register yet never fire. That presents as a run with no points and "Receiver off". The Activity checks `ACCESS_FINE_LOCATION` on resume and surfaces a banner, and `LoggingService.startLogging` refuses to start without it, so the failure is named instead of silent.
+
 **Fix status comes from `GnssStatus`, not from fix age.**
 A `GnssStatus.Callback` is registered next to the location updates (same handler thread, ~1 Hz from the engine). "Has fix" is defined as at least one satellite flagged `usedInFix`; this is the platform's own notion, updates even while no `Location` arrives, and needs no timer to expire a stale fix. Provider on/off is taken from `LocationListener.onProviderEnabled/Disabled`. The per-fix state update copies the existing `LoggingState` so these fields survive.
 
