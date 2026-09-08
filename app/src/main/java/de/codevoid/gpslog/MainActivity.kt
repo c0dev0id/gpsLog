@@ -2,6 +2,7 @@ package de.codevoid.gpslog
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     vm = vm,
                     onSave = { createDocument.launch(suggestedName()) },
                     onShare = { exportForShare() },
+                    onOpenSettings = { openAppSettings() },
                 )
             }
         }
@@ -62,6 +64,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        vm.setPreciseLocation(
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
         vm.refreshRuns()
     }
 
@@ -80,6 +85,12 @@ class MainActivity : ComponentActivity() {
         val pm = getSystemService(PowerManager::class.java)
         if (pm.isIgnoringBatteryOptimizations(packageName)) return
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             .setData(Uri.parse("package:$packageName"))
         runCatching { startActivity(intent) }
     }

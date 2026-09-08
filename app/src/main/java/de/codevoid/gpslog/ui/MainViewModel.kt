@@ -35,6 +35,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _selected = MutableStateFlow<Set<Long>>(emptySet())
     val selected = _selected.asStateFlow()
 
+    /** False when the app holds only approximate location; the Activity keeps this current. */
+    private val _preciseLocation = MutableStateFlow(true)
+    val preciseLocation = _preciseLocation.asStateFlow()
+
+    fun setPreciseLocation(granted: Boolean) {
+        _preciseLocation.value = granted
+    }
+
     fun refreshRuns() {
         viewModelScope.launch {
             _runs.value = withContext(Dispatchers.IO) { repo.listRuns() }
