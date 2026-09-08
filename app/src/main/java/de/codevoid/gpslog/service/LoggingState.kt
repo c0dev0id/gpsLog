@@ -15,7 +15,14 @@ data class LoggingState(
     val lastFixTimeMillis: Long? = null,
     val speedMetersPerSecond: Float? = null,
     val accuracyMeters: Float? = null,
-)
+    /** False when the GPS provider is switched off in system settings. */
+    val gpsEnabled: Boolean = true,
+    val satellitesVisible: Int = 0,
+    val satellitesUsedInFix: Int = 0,
+) {
+    /** The GNSS engine reports satellites used in its current fix only while it has one. */
+    val hasFix: Boolean get() = satellitesUsedInFix > 0
+}
 
 /**
  * Process-global holder for [LoggingState]. The service writes it at the (throttled) UI rate; the

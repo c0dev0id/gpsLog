@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -26,18 +27,22 @@ import de.codevoid.gpslog.data.RunWriter
 import de.codevoid.gpslog.data.SettingsStore
 import de.codevoid.gpslog.model.GpsRecord
 import java.util.Locale
+import java.util.concurrent.Executor
 
 /**
  * Foreground service that records raw GPS fixes at the chipset rate. Fixes are delivered on a
  * dedicated HandlerThread (never the main Looper); every fix is written to disk while UI state and
- * the notification are updated at a throttled rate. A partial wake lock keeps writes flowing under
- * Doze. The service exists only for the duration of a run and resumes an interrupted run on
- * system-driven restart (START_STICKY) or reboot (BootReceiver).
+ * the notification are updated at a throttled rate. GNSS satellite status is tracked alongside so
+ * the UI can show why no points arrive (provider off, no fix) and how many satellites are in view.
+ * A partial wake lock keeps writes flowing under Doze. The service exists only for the duration of
+ * a run and resumes an interrupted run on system-driven restart (START_STICKY) or reboot
+ * (BootReceiver).
  */
 class LoggingService : Service() {
 
     private lateinit var handlerThread: HandlerThread
     private lateinit var handler: Handler
+    private val handlerExecutor = Executor { handler.post(it) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var locationManager: LocationManager
     private lateinit var settings: SettingsStore
@@ -119,12 +124,14 @@ class LoggingService : Service() {
                 runId = id,
                 startTimeMillis = startTimeMillis,
                 pointCount = pointCount,
+                gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
             )
         )
         try {
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, 0L, 0f, listener, handlerThread.looper,
             )
+            locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)
         } catch (e: SecurityException) {
             stopLoggingInternal(clearActive = true)
             return
@@ -132,7 +139,36 @@ class LoggingService : Service() {
         handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
     }
 
-    private val listener = LocationListener { location -> onFix(location) }
+    private val listener = object : LocationListener {
+        override fun onLocationChanged(location: Location) = onFix(location)
+        override fun onProviderEnabled(provider: String) = setGpsEnabled(true)
+        override fun onProviderDisabled(provider: String) = setGpsEnabled(false)
+    }
+
+    private val gnssCallback = object : GnssStatus.Callback() {
+        override fun onSatelliteStatusChanged(status: GnssStatus) {
+            var used = 0
+            for (i in 0 until status.satelliteCount) if (status.usedInFix(i)) used++
+            onGnssStatus(visible = status.satelliteCount, usedInFix = used)
+        }
+
+        override fun onStopped() = onGnssStatus(visible = 0, usedInFix = 0)
+    }
+
+    private fun setGpsEnabled(enabled: Boolean) {
+        LoggingStateHolder.update { it.copy(gpsEnabled = enabled) }
+    }
+
+    /** ~1 Hz from the GNSS engine; drives the notification only while there is no fix. */
+    private fun onGnssStatus(visible: Int, usedInFix: Int) {
+        LoggingStateHolder.update { it.copy(satellitesVisible = visible, satellitesUsedInFix = usedInFix) }
+        if (usedInFix > 0) return
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS) {
+            lastNotifUpdateMs = nowMs
+            updateNotification(getString(R.string.notif_no_fix, visible))
+        }
+    }
 
     private fun onFix(location: Location) {
         val w = writer ?: return
@@ -146,18 +182,15 @@ class LoggingService : Service() {
         val nowMs = SystemClock.elapsedRealtime()
         if (nowMs - lastUiUpdateMs >= UI_THROTTLE_MS) {
             lastUiUpdateMs = nowMs
-            LoggingStateHolder.set(
-                LoggingState(
-                    isLogging = true,
-                    runId = runId,
-                    startTimeMillis = startTimeMillis,
+            LoggingStateHolder.update {
+                it.copy(
                     pointCount = pointCount,
                     updateRateHz = rate,
                     lastFixTimeMillis = location.time,
                     speedMetersPerSecond = if (location.hasSpeed()) location.speed else null,
                     accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
                 )
-            )
+            }
         }
         if (nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS) {
             lastNotifUpdateMs = nowMs
@@ -189,6 +222,7 @@ class LoggingService : Service() {
         handler.removeCallbacks(flushRunnable)
         try {
             locationManager.removeUpdates(listener)
+            locationManager.unregisterGnssStatusCallback(gnssCallback)
         } catch (_: Exception) {
         }
         writer?.close()
@@ -207,6 +241,7 @@ class LoggingService : Service() {
         handler.removeCallbacks(flushRunnable)
         try {
             locationManager.removeUpdates(listener)
+            locationManager.unregisterGnssStatusCallback(gnssCallback)
         } catch (_: Exception) {
         }
         writer?.close()
