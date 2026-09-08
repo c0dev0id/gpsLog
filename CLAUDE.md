@@ -12,7 +12,19 @@ screen.
 
 ## Build & CI
 
-Builds normally run in CI/CD.
+Builds run in CI/CD only. Do **not** attempt a local Android build — AGP is
+unreachable behind a firewall, so there is no point trying to work around it.
+
+Gradle tasks the workflows invoke (for reference, not for local use):
+
+| Task | Command |
+|---|---|
+| Lint | `./gradlew lint` |
+| Debug APK | `./gradlew assembleDebug` |
+| Signed release APK | `./gradlew assembleRelease -PversionName=… -PversionCode=…` |
+
+There is no test suite yet (no `src/test` or `src/androidTest`), so there is
+nothing to run for unit or instrumentation tests.
 
 | CI task | Trigger |
 |---|---|
@@ -33,6 +45,12 @@ the release build stays unsigned.
 - **minSdk 26** (Android 8.0) — no need for pre-Oreo compatibility paths.
 - The Compose BOM only manages the `androidx.compose.*` groups. Any other
   AndroidX dependency (e.g. `activity-compose`) needs an explicit version.
+- **AGP 9.1's built-in Kotlin support is used** — only `com.android.application`
+  and the Compose compiler plugin are applied. Do not add the `kotlin-android`
+  plugin; AGP registers the Kotlin tasks and `kotlin { }` extension itself.
+- Release signing is driven by `SIGNING_*` environment variables in
+  `app/build.gradle.kts`. When they are absent the signing config is not
+  created, so debug builds still work and release builds stay unsigned.
 
 ## Rules
 
