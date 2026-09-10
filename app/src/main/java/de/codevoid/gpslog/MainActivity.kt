@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
                 GpsLogScreen(
                     vm = vm,
                     onShare = { exportForShare() },
+                    onShareDebugLog = { shareDebugLog() },
                     onOpenSettings = { openAppSettings() },
                     onInstall = { installUpdate(it) },
                 )
@@ -120,11 +121,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun shareDebugLog() {
+        val file = vm.latestDebugLog() ?: return
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = MIME_TEXT
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, "Share debug log"))
+    }
+
     private fun suggestedName(): String =
         "gpslog-${FILE_FMT.format(Instant.now())}.gpx"
 
     private companion object {
         const val MIME_GPX = "application/gpx+xml"
+        const val MIME_TEXT = "text/plain"
         val FILE_FMT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneId.systemDefault())
     }

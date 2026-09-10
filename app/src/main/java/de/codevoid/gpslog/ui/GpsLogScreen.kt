@@ -40,6 +40,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -77,6 +78,7 @@ private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZo
 fun GpsLogScreen(
     vm: MainViewModel,
     onShare: () -> Unit,
+    onShareDebugLog: () -> Unit,
     onOpenSettings: () -> Unit,
     onInstall: (File) -> Unit,
 ) {
@@ -88,6 +90,7 @@ fun GpsLogScreen(
     val updateState by vm.update.collectAsStateWithLifecycle()
     val exportPreview by vm.exportPreview.collectAsStateWithLifecycle()
     val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
+    val debugLogging by vm.debugLogging.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -169,6 +172,9 @@ fun GpsLogScreen(
                     modifier = Modifier.weight(1f),
                     recordingSource = recordingSource,
                     onSelectSource = vm::setRecordingSource,
+                    debugLogging = debugLogging,
+                    onSetDebugLogging = vm::setDebugLogging,
+                    onShareDebugLog = onShareDebugLog,
                     installedVersion = vm.installedVersion,
                     updateState = updateState,
                     onCheckUpdate = vm::checkForUpdate,
@@ -231,6 +237,9 @@ private fun SettingsTab(
     modifier: Modifier,
     recordingSource: String,
     onSelectSource: (String) -> Unit,
+    debugLogging: Boolean,
+    onSetDebugLogging: (Boolean) -> Unit,
+    onShareDebugLog: () -> Unit,
     installedVersion: String,
     updateState: UpdateState,
     onCheckUpdate: () -> Unit,
@@ -246,6 +255,11 @@ private fun SettingsTab(
         RecordingSourceSection(
             recordingSource = recordingSource,
             onSelectSource = onSelectSource,
+        )
+        DebugSection(
+            debugLogging = debugLogging,
+            onSetDebugLogging = onSetDebugLogging,
+            onShareDebugLog = onShareDebugLog,
         )
         UpdateSection(
             installedVersion = installedVersion,
@@ -413,6 +427,44 @@ private fun UpdateSection(
                         else -> {}
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Diagnostics: when enabled, an external-source run tees its raw NMEA stream to a text file so the
+ * receiver's constellations, rate and HDOP can be inspected. Only meaningful for a Bluetooth source
+ * (the internal provider emits no NMEA).
+ */
+@Composable
+private fun DebugSection(
+    debugLogging: Boolean,
+    onSetDebugLogging: (Boolean) -> Unit,
+    onShareDebugLog: () -> Unit,
+) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Debug NMEA log", style = MaterialTheme.typography.titleMedium)
+                Switch(checked = debugLogging, onCheckedChange = onSetDebugLogging)
+            }
+            Text(
+                "Records the raw NMEA from the external receiver to a text file you can share.",
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = onShareDebugLog, modifier = Modifier.fillMaxWidth()) {
+                Text("Share debug log")
             }
         }
     }

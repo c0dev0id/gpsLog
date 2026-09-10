@@ -46,6 +46,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Recording source: `""` = internal GPS, otherwise a paired Bluetooth MAC. */
     val recordingSource = settings.recordingSource
 
+    val debugLogging = settings.debugLogging
+
     private val _runs = MutableStateFlow<List<RunInfo>>(emptyList())
     val runs = _runs.asStateFlow()
 
@@ -197,6 +199,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setRecordingSource(mac: String) = settings.setRecordingSource(mac)
+
+    fun setDebugLogging(enabled: Boolean) = settings.setDebugLogging(enabled)
+
+    /** The most recent captured NMEA debug log, or null if none has been recorded. */
+    fun latestDebugLog(): File? =
+        File(getApplication<Application>().cacheDir, "debug")
+            .listFiles()
+            ?.filter { it.isFile }
+            ?.maxByOrNull { it.lastModified() }
 
     fun setAccuracyMeters(value: Int) = settings.setAccuracyMeters(value)
 
