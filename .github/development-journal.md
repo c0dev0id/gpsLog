@@ -58,8 +58,20 @@ Accuracy always drops missing/worse fixes. When distance > 0 the decision is gov
 **GPX written with the built-in `android.util.Xml` serializer, streamed to the output.**
 No XML library. One `<trk>` per run; a new `<trkseg>` is started across gaps larger than 60 s (e.g. a reboot pause) so viewers don't draw a straight line over the gap.
 
+**UI is two tabs (Record / Runs), not one long scroll.**
+The first cut put every control and the runs list in a single `LazyColumn`; live stats then reflowed the list on start/stop and in landscape pushed it off-screen, and the whole thing scrolled as one blob so a swipe on a run row scrolled the controls instead of the list. Splitting into a **Record** tab (start/stop + live stats) and a **Runs** tab (list + export) gives each surface its own scroll and fixes both. Tabs are plain `PrimaryTabRow` + a `rememberSaveable` index — no `navigation-compose`, honouring the "no navigation component" rule. A recording dot on the Record tab label keeps the logging state visible from the Runs tab.
+
+**Row actions: explicit checkbox select, two-step swipe-to-reveal delete.**
+Selection was a hidden swipe-right with no affordance; it is now a leading `Checkbox` (discoverable, multi-select). Delete no longer auto-dismisses on swipe (too easy to lose a run) — swiping the card left uncovers a Delete button that must be tapped. The reveal uses a plain `draggable` + `Animatable` offset rather than `AnchoredDraggable`, because those APIs are stable across Compose releases and this project cannot be built locally to catch breakage. The active run cannot be revealed, so it cannot be deleted while logging.
+
+**Export is one action + a bottom sheet, tied to the selection.**
+The always-visible filter fields and separate Save/Share buttons are gone. An `Export (N)` bar appears only when runs are selected and opens a `ModalBottomSheet` holding the accuracy/distance/time filters and the Save-file / Share choices, so the record → list → export flow reads top-down and the filters live where they are used.
+
+**Dynamic (Material You) colour via a `GpsLogTheme` wrapper.**
+The app previously used a bare `MaterialTheme {}` with no `colorScheme`, i.e. the baseline purple and no dark mode. `ui/Theme.kt` selects `dynamicLightColorScheme`/`dynamicDarkColorScheme` from `isSystemInDarkTheme()`; at minSdk 34 both are unconditionally available, so no fallback palette and no version guard.
+
 ## Core Features
 
 - **GPS logging foreground service** — records raw fixes at the chipset rate, survives Doze, resumes after process kill or reboot.
-- **Single configuration screen** — start/stop, live stats, and the past-runs list with swipe-to-delete / swipe-to-select.
-- **GPX export** — selected runs saved via SAF or shared via the system share sheet, with persisted accuracy/distance/time filters.
+- **Two-tab screen** — a Record tab (start/stop + live stats) and a Runs tab (the past-runs list with checkbox multi-select and two-step swipe-to-delete).
+- **GPX export** — selected runs saved via SAF or shared via the system share sheet from an export sheet carrying the persisted accuracy/distance/time filters.

@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Live stats show the GPS state (disabled / receiver off / searching / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
 
 ### Changed
+- Reorganised the UI into two tabs — **Record** (start/stop and live stats) and **Runs** (the list and export) — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
+- Selecting a run is now an explicit checkbox instead of a hidden swipe; deleting a run is a two-step swipe-to-reveal that requires tapping a Delete button, so runs can no longer be removed by an accidental swipe
+- Export is a single action on the selected runs that opens a sheet carrying the accuracy/distance/time filters and the Save-file / Share choices, in place of the separate always-visible filter and Save/Share controls
+- Applied the system's dynamic (Material You) colours and dark theme
 - Raised minimum supported version to Android 14 (`minSdk` 26 → 34)
 
 ## [0.0.1] - 2026-09-08
