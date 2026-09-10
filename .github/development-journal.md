@@ -70,8 +70,12 @@ The always-visible filter fields and separate Save/Share buttons are gone. An `E
 **Dynamic (Material You) colour via a `GpsLogTheme` wrapper.**
 The app previously used a bare `MaterialTheme {}` with no `colorScheme`, i.e. the baseline purple and no dark mode. `ui/Theme.kt` selects `dynamicLightColorScheme`/`dynamicDarkColorScheme` from `isSystemInDarkTheme()`; at minSdk 34 both are unconditionally available, so no fallback palette and no version guard.
 
+**In-app nightly updater talks to the GitHub releases API, no token, no library.**
+The Record tab has a "Check for updates" control. `UpdateChecker` does a plain `HttpURLConnection` GET of `releases/tags/dev` (the rolling pre-release) and parses it with the built-in `org.json` — release assets on a public repo download anonymously, so no token is embedded, and a `User-Agent` header is set because GitHub 403s requests without one. The asset is `gpslog-dev-<sha>.apk` and the installed `versionName` is `dev-<sha>`, so "new" is decided by comparing the short SHA. Note this can only detect *different*, not *newer* — dev SHAs are unordered and no build timestamp is stored. The APK is streamed to `cacheDir/downloads/` and handed to the system installer via `ACTION_VIEW` + `FileProvider`. This needs `REQUEST_INSTALL_PACKAGES` (banned on Play, fine for GitHub distribution) and `INTERNET` (the app's first use of the network — location logging never needed it); the first install routes the user through `ACTION_MANAGE_UNKNOWN_APP_SOURCES`. Crucially, an in-place update only succeeds when the nightly is signed with the same key as the installed build (the CI keystore) — a differently-signed or local build must be uninstalled first.
+
 ## Core Features
 
 - **GPS logging foreground service** — records raw fixes at the chipset rate, survives Doze, resumes after process kill or reboot.
 - **Two-tab screen** — a Record tab (start/stop + live stats) and a Runs tab (the past-runs list with checkbox multi-select and two-step swipe-to-delete).
 - **GPX export** — selected runs saved via SAF or shared via the system share sheet from an export sheet carrying the persisted accuracy/distance/time filters.
+- **In-app updater** — checks the GitHub `dev` pre-release and installs a newer signed nightly APK via the system package installer.

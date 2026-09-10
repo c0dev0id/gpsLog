@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adaptive launcher icon (with a monochrome layer for themed icons) and a matching notification icon
 - Precise location is required: without it the screen shows a banner with a shortcut to the app's settings, Start is disabled, and the service refuses to record a run that could not produce usable fixes
 - Live stats show the GPS state (disabled / receiver off / searching / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
+- In-app updater on the Record tab: checks the published nightly on GitHub and, when it differs from the installed build, downloads the signed APK and hands it to the system installer (an in-place update requires the installed build to be signed with the same key)
 
 ### Changed
 - Reorganised the UI into two tabs — **Record** (start/stop and live stats) and **Runs** (the list and export) — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
