@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     onSave = { createDocument.launch(suggestedName()) },
                     onShare = { exportForShare() },
                     onOpenSettings = { openAppSettings() },
+                    onInstall = { installUpdate(it) },
                 )
             }
         }
@@ -90,6 +91,26 @@ class MainActivity : ComponentActivity() {
     private fun openAppSettings() {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }
+    }
+
+    /**
+     * Hands the downloaded APK to the system package installer. An in-place update only succeeds
+     * when the new APK is signed with the same key as the installed build (the CI keystore). The
+     * first time, the user must grant "install unknown apps"; we route them there and they re-tap.
+     */
+    private fun installUpdate(file: File) {
+        if (!packageManager.canRequestPackageInstalls()) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(Uri.parse("package:$packageName"))
+            runCatching { startActivity(intent) }
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         runCatching { startActivity(intent) }
     }
 

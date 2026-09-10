@@ -30,6 +30,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -63,6 +64,7 @@ import de.codevoid.gpslog.data.FilterSettings
 import de.codevoid.gpslog.data.RunInfo
 import de.codevoid.gpslog.service.LoggingState
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -79,12 +81,14 @@ fun GpsLogScreen(
     onSave: () -> Unit,
     onShare: () -> Unit,
     onOpenSettings: () -> Unit,
+    onInstall: (File) -> Unit,
 ) {
     val state by vm.loggingState.collectAsStateWithLifecycle()
     val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val runs by vm.runs.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
+    val updateState by vm.update.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -116,6 +120,10 @@ fun GpsLogScreen(
                     onStart = vm::start,
                     onStop = vm::stop,
                     onOpenSettings = onOpenSettings,
+                    installedVersion = vm.installedVersion,
+                    updateState = updateState,
+                    onCheckUpdate = vm::checkForUpdate,
+                    onDownloadInstall = { vm.downloadAndInstall(onInstall) },
                 )
                 else -> RunsTab(
                     modifier = Modifier.weight(1f),
@@ -161,6 +169,10 @@ private fun RecordTab(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onOpenSettings: () -> Unit,
+    installedVersion: String,
+    updateState: UpdateState,
+    onCheckUpdate: () -> Unit,
+    onDownloadInstall: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -180,6 +192,69 @@ private fun RecordTab(
         )
         if (state.isLogging) {
             LiveStats(state)
+        }
+        UpdateSection(
+            installedVersion = installedVersion,
+            updateState = updateState,
+            onCheckUpdate = onCheckUpdate,
+            onDownloadInstall = onDownloadInstall,
+        )
+    }
+}
+
+@Composable
+private fun UpdateSection(
+    installedVersion: String,
+    updateState: UpdateState,
+    onCheckUpdate: () -> Unit,
+    onDownloadInstall: () -> Unit,
+) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Stat("Version", installedVersion)
+            when (val s = updateState) {
+                is UpdateState.Downloading -> {
+                    Text("Downloading… ${(s.progress * 100).roundToInt()}%")
+                    LinearProgressIndicator(
+                        progress = { s.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                is UpdateState.Available -> {
+                    Text(
+                        "Update available: dev-${s.nightly.sha}",
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Button(onClick = onDownloadInstall, modifier = Modifier.fillMaxWidth()) {
+                        Text("Download & install")
+                    }
+                }
+                else -> {
+                    OutlinedButton(
+                        onClick = onCheckUpdate,
+                        enabled = s != UpdateState.Checking,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (s == UpdateState.Checking) "Checking…" else "Check for updates")
+                    }
+                    when (s) {
+                        UpdateState.UpToDate -> Text(
+                            "You're on the latest development build.",
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        is UpdateState.Error -> Text(
+                            s.message,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        else -> {}
+                    }
+                }
+            }
         }
     }
 }
