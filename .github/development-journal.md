@@ -6,7 +6,7 @@
 - **UI:** Jetpack Compose (Material3), Compose BOM 2026.02.01
 - **Min SDK:** 34 (Android 14)
 - **Target/Compile SDK:** 36
-- **Location:** platform `LocationManager` + `GPS_PROVIDER` (no Play Services / FusedLocationProvider)
+- **Location:** platform `LocationManager` + `GPS_PROVIDER` (no Play Services / FusedLocationProvider); optional external classic-Bluetooth GNSS receiver over SPP/NMEA
 - **Persistence:** per-run append-only fixed-size binary files + `SharedPreferences` (no Room, no DataStore)
 - **State sharing:** `Application`-scoped singleton + `StateFlow` (no DI framework)
 - **Build:** CI-only via GitHub Actions (Gradle 9.4.0, AGP 9.1.0, Kotlin Compose plugin 2.3.10, JDK 17)
@@ -76,9 +76,19 @@ The app previously used a bare `MaterialTheme {}` with no `colorScheme`, i.e. th
 **In-app nightly updater talks to the GitHub releases API, no token, no library.**
 The Settings tab has a "Check for updates" control. `UpdateChecker` does a plain `HttpURLConnection` GET of `releases/tags/dev` (the rolling pre-release) and parses it with the built-in `org.json` — release assets on a public repo download anonymously, so no token is embedded, and a `User-Agent` header is set because GitHub 403s requests without one. The asset is `gpslog-dev-<sha>.apk` and the installed `versionName` is `dev-<sha>`, so "new" is decided by comparing the short SHA. Note this can only detect *different*, not *newer* — dev SHAs are unordered and no build timestamp is stored. The APK is streamed to `cacheDir/downloads/` and handed to the system installer via `ACTION_VIEW` + `FileProvider`. This needs `REQUEST_INSTALL_PACKAGES` (banned on Play, fine for GitHub distribution) and `INTERNET` (the app's first use of the network — location logging never needed it); the first install routes the user through `ACTION_MANAGE_UNKNOWN_APP_SOURCES`. Crucially, an in-place update only succeeds when the nightly is signed with the same key as the installed build (the CI keystore) — a differently-signed or local build must be uninstalled first.
 
+**Recording source is pluggable: internal GPS or an external classic-Bluetooth NMEA receiver.**
+The motivation is comparison — recording an external receiver while the phone's own GPS stays free for navigation. A `FixSink` interface (`onFix`/`onSatelliteStatus`/`onSourceEnabled`) is the seam both sources drive; `LoggingService` implements it and `startLogging` branches on `SettingsStore.recordingSource` (`""` = internal, otherwise a paired MAC). The internal path is unchanged. The external path is `BluetoothNmeaSource`: an RFCOMM socket on the SPP UUID `00001101-0000-1000-8000-00805F9B34FB`, read on its **own** thread (a blocking socket read must not sit on the `gps-logger` HandlerThread and starve the flush/notification callbacks), with each parsed fix `handler.post`ed back onto the logger thread so the writer and its counters stay single-threaded. It auto-reconnects on drop and reports the receiver off in the meantime. Classic Bluetooth (SPP), not BLE — it's a plain ASCII byte stream, simpler than GATT.
+
+**Bluetooth devices are not filtered for "is this a GNSS device"; the user picks.**
+Bluetooth Class-of-Device has no GNSS class and SPP receivers report as uncategorized, so there is no reliable programmatic signal. The Settings picker lists every paired classic/dual device by name and trusts the user's choice. `BLUETOOTH_CONNECT` is requested lazily from the picker (via a Compose `rememberLauncherForActivityResult`), never in the up-front location chain, so an internal-only user is never prompted. No `BLUETOOTH_SCAN` — only bonded devices are read, never discovery.
+
+**NMEA parsing is `GGA` + `RMC` only; `GSA`/`GSV` are optional enrichment.**
+`data/NmeaParser` is pure Kotlin (unit-tested in CI like `PointFilter`/`RunCodec`), talker-agnostic (accepts `GP`/`GN`/`GL`/… by matching the 3-char sentence type). RMC carries the only date, so it is the emit trigger; a `GpsRecord` is produced per valid RMC (status `A`), enriched with the most recent GGA (MSL altitude, HDOP, fix quality, satellites-in-use). NMEA has no meters-accuracy field and `PointFilter` drops points with missing accuracy, so accuracy is derived as `HDOP × 5 m` (nominal UERE) — otherwise every external point would be filtered out on export. GSV, if present, sums satellites-in-view across per-constellation talkers purely for the live stats. Reference device: a GNS 3000 (MediaTek MT3333, SBAS-capable — its DGPS/SBAS fixes report GGA quality 2, which the parser accepts as any quality > 0).
+
 ## Core Features
 
 - **GPS logging foreground service** — records raw fixes at the chipset rate, survives Doze, resumes after process kill or reboot.
-- **Four-tab screen** — a Record tab (start/stop + live stats), a Runs tab (the past-runs list with checkbox multi-select plus Delete/Merge), an Export tab enabled by the selection, and a Settings tab (the in-app updater).
+- **Selectable recording source** — the internal GPS or a paired external classic-Bluetooth GNSS receiver (SPP/NMEA), chosen on the Settings tab.
+- **Four-tab screen** — a Record tab (start/stop + live stats), a Runs tab (the past-runs list with checkbox multi-select plus Delete/Merge), an Export tab enabled by the selection, and a Settings tab (GPS-device picker + the in-app updater).
 - **GPX export** — selected runs shared via the system share sheet from the Export tab, which carries the persisted accuracy/distance/time filters and a live preview of the filtered result (tracks, remaining points, percentage reduction).
 - **In-app updater** — checks the GitHub `dev` pre-release and installs a newer signed nightly APK via the system package installer.
