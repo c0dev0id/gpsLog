@@ -32,17 +32,16 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +77,6 @@ private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZo
 @Composable
 fun GpsLogScreen(
     vm: MainViewModel,
-    onSave: () -> Unit,
     onShare: () -> Unit,
     onOpenSettings: () -> Unit,
     onInstall: (File) -> Unit,
@@ -89,8 +87,14 @@ fun GpsLogScreen(
     val selected by vm.selected.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
     val updateState by vm.update.collectAsStateWithLifecycle()
+    val exportPreview by vm.exportPreview.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
+
+    // The Export tab is only reachable with a selection; leaving it empty falls back to Runs.
+    LaunchedEffect(selected.isEmpty()) {
+        if (selected.isEmpty() && tab == 2) tab = 1
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("gpsLog") }) }
@@ -111,6 +115,12 @@ fun GpsLogScreen(
                     onClick = { tab = 1 },
                     text = { Text("Runs") },
                 )
+                Tab(
+                    selected = tab == 2,
+                    enabled = selected.isNotEmpty(),
+                    onClick = { tab = 2 },
+                    text = { Text(if (selected.isEmpty()) "Export" else "Export (${selected.size})") },
+                )
             }
             when (tab) {
                 0 -> RecordTab(
@@ -125,18 +135,23 @@ fun GpsLogScreen(
                     onCheckUpdate = vm::checkForUpdate,
                     onDownloadInstall = { vm.downloadAndInstall(onInstall) },
                 )
-                else -> RunsTab(
+                1 -> RunsTab(
                     modifier = Modifier.weight(1f),
                     runs = runs,
                     selected = selected,
                     activeRunId = if (state.isLogging) state.runId else null,
-                    filters = filters,
                     onToggleSelect = vm::toggleSelect,
                     onDelete = vm::delete,
+                )
+                else -> ExportTab(
+                    modifier = Modifier.weight(1f),
+                    selectedRuns = selected.size,
+                    selectedPoints = runs.filter { it.id in selected }.sumOf { it.pointCount },
+                    filters = filters,
+                    preview = exportPreview,
                     onAccuracy = vm::setAccuracyMeters,
                     onDistance = vm::setDistanceMeters,
                     onTime = vm::setTimeSeconds,
-                    onSave = onSave,
                     onShare = onShare,
                 )
             }
@@ -259,81 +274,145 @@ private fun UpdateSection(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RunsTab(
     modifier: Modifier,
     runs: List<RunInfo>,
     selected: Set<Long>,
     activeRunId: Long?,
-    filters: FilterSettings,
     onToggleSelect: (Long) -> Unit,
     onDelete: (Long) -> Unit,
+) {
+    if (runs.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "No runs yet — start recording on the Record tab.",
+                color = MaterialTheme.colorScheme.outline,
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(runs, key = { it.id }) { run ->
+                RunRow(
+                    run = run,
+                    selected = run.id in selected,
+                    isActive = run.id == activeRunId,
+                    onToggleSelect = { onToggleSelect(run.id) },
+                    onDelete = { onDelete(run.id) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The selection's export surface: a summary of what is selected, the accuracy/distance/time
+ * filters, a live preview of the filtered result, and a single Export action that hands the GPX to
+ * the system share sheet (saving to disk is just sharing to a file manager).
+ */
+@Composable
+private fun ExportTab(
+    modifier: Modifier,
+    selectedRuns: Int,
+    selectedPoints: Long,
+    filters: FilterSettings,
+    preview: ExportPreview,
     onAccuracy: (Int) -> Unit,
     onDistance: (Float) -> Unit,
     onTime: (Int) -> Unit,
-    onSave: () -> Unit,
     onShare: () -> Unit,
 ) {
-    var showSheet by remember { mutableStateOf(false) }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        if (runs.isEmpty()) {
-            Box(
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            "$selectedRuns ${if (selectedRuns == 1) "run" else "runs"} selected " +
+                "($selectedPoints ${if (selectedPoints == 1L) "point" else "points"})",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Card {
+            Column(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center,
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    "No runs yet — start recording on the Record tab.",
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(runs, key = { it.id }) { run ->
-                    RunRow(
-                        run = run,
-                        selected = run.id in selected,
-                        isActive = run.id == activeRunId,
-                        onToggleSelect = { onToggleSelect(run.id) },
-                        onDelete = { onDelete(run.id) },
+                Text("Filters", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IntFilterField(
+                        label = "Accuracy m",
+                        value = filters.accuracyMeters,
+                        range = 1..999,
+                        onChange = onAccuracy,
+                        modifier = Modifier.weight(1f),
+                    )
+                    FloatFilterField(
+                        label = "Distance m",
+                        value = filters.distanceMeters,
+                        onChange = onDistance,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IntFilterField(
+                        label = "Time s",
+                        value = filters.timeSeconds,
+                        range = 0..999,
+                        onChange = onTime,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
         }
+        ExportResult(preview)
+        Button(
+            onClick = onShare,
+            enabled = preview is ExportPreview.Ready,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Export")
+        }
+    }
+}
 
-        if (selected.isNotEmpty()) {
-            Surface(tonalElevation = 3.dp) {
-                Button(
-                    onClick = { showSheet = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                ) {
-                    Text("Export (${selected.size})")
+@Composable
+private fun ExportResult(preview: ExportPreview) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Result", style = MaterialTheme.typography.titleSmall)
+            when (preview) {
+                ExportPreview.Empty -> Text("—", color = MaterialTheme.colorScheme.outline)
+                ExportPreview.Computing -> Text("Calculating…", color = MaterialTheme.colorScheme.outline)
+                is ExportPreview.Ready -> {
+                    val reduction = if (preview.totalPoints > 0L) {
+                        ((preview.totalPoints - preview.keptPoints) * 100 / preview.totalPoints).toInt()
+                    } else {
+                        0
+                    }
+                    Text(
+                        "${preview.tracks} ${if (preview.tracks == 1) "track" else "tracks"}, " +
+                            "${preview.keptPoints} ${if (preview.keptPoints == 1L) "point" else "points"} " +
+                            "($reduction% reduction)",
+                    )
                 }
             }
         }
-    }
-
-    if (showSheet) {
-        ExportSheet(
-            count = selected.size,
-            filters = filters,
-            onAccuracy = onAccuracy,
-            onDistance = onDistance,
-            onTime = onTime,
-            onSave = { showSheet = false; onSave() },
-            onShare = { showSheet = false; onShare() },
-            onDismiss = { showSheet = false },
-        )
     }
 }
 
@@ -419,56 +498,6 @@ private fun Stat(label: String, value: String, highlight: Boolean? = null) {
                 false -> MaterialTheme.colorScheme.error
             },
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExportSheet(
-    count: Int,
-    filters: FilterSettings,
-    onAccuracy: (Int) -> Unit,
-    onDistance: (Float) -> Unit,
-    onTime: (Int) -> Unit,
-    onSave: () -> Unit,
-    onShare: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text("Export $count ${if (count == 1) "run" else "runs"}", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntFilterField(
-                    label = "Accuracy m",
-                    value = filters.accuracyMeters,
-                    range = 1..999,
-                    onChange = onAccuracy,
-                    modifier = Modifier.weight(1f),
-                )
-                FloatFilterField(
-                    label = "Distance m",
-                    value = filters.distanceMeters,
-                    onChange = onDistance,
-                    modifier = Modifier.weight(1f),
-                )
-                IntFilterField(
-                    label = "Time s",
-                    value = filters.timeSeconds,
-                    range = 0..999,
-                    onChange = onTime,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f)) { Text("Save file") }
-                Button(onClick = onShare, modifier = Modifier.weight(1f)) { Text("Share") }
-            }
-        }
     }
 }
 

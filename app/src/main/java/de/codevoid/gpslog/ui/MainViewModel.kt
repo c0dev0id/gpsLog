@@ -6,16 +6,24 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.codevoid.gpslog.App
 import de.codevoid.gpslog.data.RunInfo
+import de.codevoid.gpslog.data.RunReader
 import de.codevoid.gpslog.export.GpxExporter
+import de.codevoid.gpslog.export.PointFilter
 import de.codevoid.gpslog.service.LoggingService
 import de.codevoid.gpslog.service.LoggingStateHolder
 import de.codevoid.gpslog.update.Nightly
 import de.codevoid.gpslog.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,6 +71,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .collect { refreshRuns() }
         }
     }
+
+    /**
+     * Live preview of the current selection + filters: track count, raw point total and how many
+     * points survive filtering. Recomputed off the main thread whenever the selection, the filters
+     * or the run list change; a superseded computation is cancelled by [transformLatest].
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val exportPreview: StateFlow<ExportPreview> =
+        combine(selected, filters, runs) { sel, filt, runList ->
+            runList.filter { it.id in sel } to filt
+        }.transformLatest { (chosen, filt) ->
+            if (chosen.isEmpty()) {
+                emit(ExportPreview.Empty)
+                return@transformLatest
+            }
+            emit(ExportPreview.Computing)
+            emit(
+                withContext(Dispatchers.IO) {
+                    var total = 0L
+                    var kept = 0L
+                    for (run in chosen) {
+                        val records = RunReader.readAll(run.file)
+                        total += records.size
+                        kept += PointFilter.filter(
+                            records,
+                            filt.accuracyMeters,
+                            filt.distanceMeters,
+                            filt.timeSeconds,
+                        ).size
+                    }
+                    ExportPreview.Ready(tracks = chosen.size, totalPoints = total, keptPoints = kept)
+                }
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExportPreview.Empty)
 
     fun setPreciseLocation(granted: Boolean) {
         _preciseLocation.value = granted
@@ -154,6 +196,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onDone()
         }
     }
+}
+
+/** Preview of the current export selection after filters, surfaced on the Export tab. */
+sealed interface ExportPreview {
+    data object Empty : ExportPreview
+    data object Computing : ExportPreview
+    data class Ready(val tracks: Int, val totalPoints: Long, val keptPoints: Long) : ExportPreview
 }
 
 /** State of the in-app nightly updater surfaced on the Record tab. */

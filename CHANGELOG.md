@@ -21,9 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In-app updater on the Record tab: checks the published nightly on GitHub and, when it differs from the installed build, downloads the signed APK and hands it to the system installer (an in-place update requires the installed build to be signed with the same key)
 
 ### Changed
-- Reorganised the UI into two tabs — **Record** (start/stop and live stats) and **Runs** (the list and export) — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
+- Reorganised the UI into three tabs — **Record** (start/stop and live stats), **Runs** (the list) and **Export** — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
 - Selecting a run is now an explicit checkbox instead of a hidden swipe; deleting a run is a two-step swipe-to-reveal that requires tapping a Delete button, so runs can no longer be removed by an accidental swipe
-- Export is a single action on the selected runs that opens a sheet carrying the accuracy/distance/time filters and the Save-file / Share choices, in place of the separate always-visible filter and Save/Share controls
+- Export is a dedicated tab, enabled only when runs are selected (its label shows the count), carrying the accuracy/distance/time filters, a summary of the selection and a live preview of the filtered result (tracks, remaining points and the percentage reduction) above a single Export action; saving to disk is done by sharing the GPX to a file manager, so the separate Save-file button is gone
 - Applied the system's dynamic (Material You) colours and dark theme
 - Raised minimum supported version to Android 14 (`minSdk` 26 → 34)
 

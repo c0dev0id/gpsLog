@@ -38,13 +38,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { requestBatteryExemption() }
 
-    private val createDocument = registerForActivityResult(
-        ActivityResultContracts.CreateDocument(MIME_GPX)
-    ) { uri: Uri? ->
-        uri ?: return@registerForActivityResult
-        contentResolver.openOutputStream(uri)?.let { out -> vm.exportSelected(out) }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -53,7 +46,6 @@ class MainActivity : ComponentActivity() {
             GpsLogTheme {
                 GpsLogScreen(
                     vm = vm,
-                    onSave = { createDocument.launch(suggestedName()) },
                     onShare = { exportForShare() },
                     onOpenSettings = { openAppSettings() },
                     onInstall = { installUpdate(it) },
