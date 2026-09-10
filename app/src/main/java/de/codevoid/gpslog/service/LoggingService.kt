@@ -30,6 +30,7 @@ import de.codevoid.gpslog.data.RunRepository
 import de.codevoid.gpslog.data.RunWriter
 import de.codevoid.gpslog.data.SettingsStore
 import de.codevoid.gpslog.model.GpsRecord
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executor
 
@@ -165,7 +166,13 @@ class LoggingService : Service(), FixSink {
                 stopLoggingInternal(clearActive = true)
                 return
             }
-            bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler).also { it.start() }
+            val debugFile = if (settings.debugLogging.value) {
+                File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$id.log")
+            } else {
+                null
+            }
+            bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler, debugFile)
+                .also { it.start() }
         }
         handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
     }

@@ -39,6 +39,15 @@ class SettingsStore(context: Context) {
         _recordingSource.value = mac
     }
 
+    /** When on, an external-source run tees its raw NMEA stream to a shareable debug log. */
+    private val _debugLogging = MutableStateFlow(prefs.getBoolean(KEY_DEBUG, false))
+    val debugLogging: StateFlow<Boolean> = _debugLogging.asStateFlow()
+
+    fun setDebugLogging(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DEBUG, enabled).apply()
+        _debugLogging.value = enabled
+    }
+
     fun setAccuracyMeters(value: Int) {
         prefs.edit().putInt(KEY_ACCURACY, value).apply()
         _filters.value = _filters.value.copy(accuracyMeters = value)
@@ -71,6 +80,7 @@ class SettingsStore(context: Context) {
         const val KEY_DISTANCE = "filter_distance_m"
         const val KEY_TIME = "filter_time_s"
         const val KEY_SOURCE = "recording_source_mac"
+        const val KEY_DEBUG = "debug_logging"
         const val KEY_ACTIVE_RUN = "active_run_id"
         const val NO_RUN = -1L
     }

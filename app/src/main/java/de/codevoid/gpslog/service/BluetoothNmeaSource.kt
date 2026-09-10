@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import de.codevoid.gpslog.data.NmeaParser
 import java.io.BufferedReader
+import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.util.UUID
@@ -28,6 +29,7 @@ class BluetoothNmeaSource(
     private val deviceAddress: String,
     private val sink: FixSink,
     private val deliver: Handler,
+    private val debugFile: File? = null,
 ) {
 
     @Volatile
@@ -49,47 +51,60 @@ class BluetoothNmeaSource(
     }
 
     private fun runLoop() {
-        while (running) {
-            var lastVisible = -1
-            var lastUsed = -1
-            val parser = NmeaParser()
-            try {
-                val s = adapter.getRemoteDevice(deviceAddress)
-                    .createRfcommSocketToServiceRecord(SPP_UUID)
-                socket = s
-                s.connect()
-                deliver.post { sink.onSourceEnabled(true) }
-                val reader = BufferedReader(InputStreamReader(s.inputStream, Charsets.US_ASCII))
-                while (running) {
-                    val line = reader.readLine() ?: break
-                    val result = parser.parse(line, SystemClock.elapsedRealtimeNanos())
-                    if (result.satellitesVisible != lastVisible ||
-                        result.satellitesUsedInFix != lastUsed
-                    ) {
-                        lastVisible = result.satellitesVisible
-                        lastUsed = result.satellitesUsedInFix
-                        deliver.post {
-                            sink.onSatelliteStatus(result.satellitesVisible, result.satellitesUsedInFix)
-                        }
-                    }
-                    result.record?.let { record -> deliver.post { sink.onFix(record) } }
-                }
-            } catch (e: SecurityException) {
-                Log.w(TAG, "BLUETOOTH_CONNECT missing; stopping Bluetooth source", e)
-                running = false
-            } catch (e: IOException) {
-                Log.w(TAG, "Bluetooth link error; will retry", e)
-            } finally {
-                closeSocket()
-            }
-            if (running) {
-                deliver.post { sink.onSourceEnabled(false) }
+        val debug = debugFile?.let { runCatching { NmeaDebugLog(it) }.getOrNull() }
+        debug?.note("session start; device=$deviceAddress")
+        try {
+            while (running) {
+                var lastVisible = -1
+                var lastUsed = -1
+                val parser = NmeaParser()
                 try {
-                    Thread.sleep(RECONNECT_DELAY_MS)
-                } catch (_: InterruptedException) {
-                    // stop() interrupts us; the running flag ends the loop.
+                    debug?.note("connecting")
+                    val s = adapter.getRemoteDevice(deviceAddress)
+                        .createRfcommSocketToServiceRecord(SPP_UUID)
+                    socket = s
+                    s.connect()
+                    debug?.note("connected")
+                    deliver.post { sink.onSourceEnabled(true) }
+                    val reader = BufferedReader(InputStreamReader(s.inputStream, Charsets.US_ASCII))
+                    while (running) {
+                        val line = reader.readLine() ?: break
+                        debug?.line(line)
+                        val result = parser.parse(line, SystemClock.elapsedRealtimeNanos())
+                        if (result.satellitesVisible != lastVisible ||
+                            result.satellitesUsedInFix != lastUsed
+                        ) {
+                            lastVisible = result.satellitesVisible
+                            lastUsed = result.satellitesUsedInFix
+                            deliver.post {
+                                sink.onSatelliteStatus(result.satellitesVisible, result.satellitesUsedInFix)
+                            }
+                        }
+                        result.record?.let { record -> deliver.post { sink.onFix(record) } }
+                    }
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "BLUETOOTH_CONNECT missing; stopping Bluetooth source", e)
+                    debug?.note("permission denied; stopping")
+                    running = false
+                } catch (e: IOException) {
+                    Log.w(TAG, "Bluetooth link error; will retry", e)
+                    debug?.note("link error: ${e.message}")
+                } finally {
+                    closeSocket()
+                }
+                if (running) {
+                    deliver.post { sink.onSourceEnabled(false) }
+                    debug?.note("disconnected; retrying in ${RECONNECT_DELAY_MS} ms")
+                    try {
+                        Thread.sleep(RECONNECT_DELAY_MS)
+                    } catch (_: InterruptedException) {
+                        // stop() interrupts us; the running flag ends the loop.
+                    }
                 }
             }
+        } finally {
+            debug?.note("session end")
+            debug?.close()
         }
     }
 
