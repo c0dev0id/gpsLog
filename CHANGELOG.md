@@ -18,11 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adaptive launcher icon (with a monochrome layer for themed icons) and a matching notification icon
 - Precise location is required: without it the screen shows a banner with a shortcut to the app's settings, Start is disabled, and the service refuses to record a run that could not produce usable fixes
 - Live stats show the GPS state (disabled / receiver off / searching / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
-- In-app updater on the Record tab: checks the published nightly on GitHub and, when it differs from the installed build, downloads the signed APK and hands it to the system installer (an in-place update requires the installed build to be signed with the same key)
+- In-app updater on the Settings tab: checks the published nightly on GitHub and, when it differs from the installed build, downloads the signed APK and hands it to the system installer (an in-place update requires the installed build to be signed with the same key)
 - Merge combines several selected runs into a single run: their points are read, merged in time order and written to one file, and the originals are removed
 
 ### Changed
-- Reorganised the UI into three tabs — **Record** (start/stop and live stats), **Runs** (the list) and **Export** — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
+- Reorganised the UI into four tabs — **Record** (start/stop and live stats), **Runs** (the list), **Export** and **Settings** (the in-app updater) — so each surface owns its own scroll and neither pushes the other off-screen, including in landscape
 - Selecting runs is an explicit checkbox (tapping anywhere on the row toggles it); Delete and the new Merge act on the whole multiselection via buttons below the list, replacing the per-row swipe-to-delete — the active run can be selected for export but not deleted or merged
 - The recording details panel stays visible before a run is started, showing dashes for every value until the first fix, so the layout no longer jumps when logging begins
 - The Export tab is greyed out while no run is selected, so it reads as unavailable

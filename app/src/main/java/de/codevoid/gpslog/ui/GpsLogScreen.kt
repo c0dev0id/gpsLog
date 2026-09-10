@@ -117,6 +117,11 @@ fun GpsLogScreen(
                         )
                     },
                 )
+                Tab(
+                    selected = tab == 3,
+                    onClick = { tab = 3 },
+                    text = { Text("Settings") },
+                )
             }
             when (tab) {
                 0 -> RecordTab(
@@ -126,10 +131,6 @@ fun GpsLogScreen(
                     onStart = vm::start,
                     onStop = vm::stop,
                     onOpenSettings = onOpenSettings,
-                    installedVersion = vm.installedVersion,
-                    updateState = updateState,
-                    onCheckUpdate = vm::checkForUpdate,
-                    onDownloadInstall = { vm.downloadAndInstall(onInstall) },
                 )
                 1 -> RunsTab(
                     modifier = Modifier.weight(1f),
@@ -140,7 +141,7 @@ fun GpsLogScreen(
                     onDeleteSelected = vm::deleteSelected,
                     onMergeSelected = vm::mergeSelected,
                 )
-                else -> ExportTab(
+                2 -> ExportTab(
                     modifier = Modifier.weight(1f),
                     selectedRuns = selected.size,
                     selectedPoints = runs.filter { it.id in selected }.sumOf { it.pointCount },
@@ -150,6 +151,13 @@ fun GpsLogScreen(
                     onDistance = vm::setDistanceMeters,
                     onTime = vm::setTimeSeconds,
                     onShare = onShare,
+                )
+                else -> SettingsTab(
+                    modifier = Modifier.weight(1f),
+                    installedVersion = vm.installedVersion,
+                    updateState = updateState,
+                    onCheckUpdate = vm::checkForUpdate,
+                    onDownloadInstall = { vm.downloadAndInstall(onInstall) },
                 )
             }
         }
@@ -181,10 +189,6 @@ private fun RecordTab(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onOpenSettings: () -> Unit,
-    installedVersion: String,
-    updateState: UpdateState,
-    onCheckUpdate: () -> Unit,
-    onDownloadInstall: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -203,6 +207,25 @@ private fun RecordTab(
             onStop = onStop,
         )
         LiveStats(state)
+    }
+}
+
+/** Currently just the in-app nightly updater; the natural home for future preferences. */
+@Composable
+private fun SettingsTab(
+    modifier: Modifier,
+    installedVersion: String,
+    updateState: UpdateState,
+    onCheckUpdate: () -> Unit,
+    onDownloadInstall: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         UpdateSection(
             installedVersion = installedVersion,
             updateState = updateState,
