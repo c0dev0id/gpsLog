@@ -14,6 +14,8 @@ import de.codevoid.gpslog.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,6 +52,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val update = _update.asStateFlow()
+
+    init {
+        // Rebuild the disk-derived run list whenever a run starts or stops (runId flips),
+        // so the Runs tab reflects a new run without waiting for the next onResume.
+        viewModelScope.launch {
+            loggingState
+                .map { it.runId }
+                .distinctUntilChanged()
+                .collect { refreshRuns() }
+        }
+    }
 
     fun setPreciseLocation(granted: Boolean) {
         _preciseLocation.value = granted
