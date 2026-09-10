@@ -43,6 +43,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val loggingState = LoggingStateHolder.state
     val filters = settings.filters
 
+    /** Recording source: `""` = internal GPS, otherwise a paired Bluetooth MAC. */
+    val recordingSource = settings.recordingSource
+
     private val _runs = MutableStateFlow<List<RunInfo>>(emptyList())
     val runs = _runs.asStateFlow()
 
@@ -192,6 +195,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             refreshRuns()
         }
     }
+
+    fun setRecordingSource(mac: String) = settings.setRecordingSource(mac)
 
     fun setAccuracyMeters(value: Int) = settings.setAccuracyMeters(value)
 

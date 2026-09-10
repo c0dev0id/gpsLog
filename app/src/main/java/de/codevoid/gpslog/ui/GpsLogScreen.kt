@@ -1,5 +1,12 @@
 package de.codevoid.gpslog.ui
 
+import android.annotation.SuppressLint
+import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,9 +30,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
@@ -44,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,6 +87,7 @@ fun GpsLogScreen(
     val filters by vm.filters.collectAsStateWithLifecycle()
     val updateState by vm.update.collectAsStateWithLifecycle()
     val exportPreview by vm.exportPreview.collectAsStateWithLifecycle()
+    val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -154,6 +167,8 @@ fun GpsLogScreen(
                 )
                 else -> SettingsTab(
                     modifier = Modifier.weight(1f),
+                    recordingSource = recordingSource,
+                    onSelectSource = vm::setRecordingSource,
                     installedVersion = vm.installedVersion,
                     updateState = updateState,
                     onCheckUpdate = vm::checkForUpdate,
@@ -210,10 +225,12 @@ private fun RecordTab(
     }
 }
 
-/** Currently just the in-app nightly updater; the natural home for future preferences. */
+/** Recording-source picker plus the in-app nightly updater; home for future preferences. */
 @Composable
 private fun SettingsTab(
     modifier: Modifier,
+    recordingSource: String,
+    onSelectSource: (String) -> Unit,
     installedVersion: String,
     updateState: UpdateState,
     onCheckUpdate: () -> Unit,
@@ -226,12 +243,121 @@ private fun SettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        RecordingSourceSection(
+            recordingSource = recordingSource,
+            onSelectSource = onSelectSource,
+        )
         UpdateSection(
             installedVersion = installedVersion,
             updateState = updateState,
             onCheckUpdate = onCheckUpdate,
             onDownloadInstall = onDownloadInstall,
         )
+    }
+}
+
+/**
+ * Chooses the run's fix source: the internal GPS (`""`) or a paired classic-Bluetooth GNSS
+ * receiver. Reading the paired-device list and its names needs `BLUETOOTH_CONNECT`, requested lazily
+ * here so an internal-only user is never prompted. Bluetooth Class-of-Device carries no "GNSS" flag,
+ * so every classic/dual paired device is listed and the user picks the right one.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("MissingPermission")
+@Composable
+private fun RecordingSourceSection(
+    recordingSource: String,
+    onSelectSource: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    var granted by remember {
+        mutableStateOf(
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted = it }
+
+    val adapter = remember { context.getSystemService(BluetoothManager::class.java)?.adapter }
+    val devices = remember(granted, adapter) {
+        if (granted && adapter != null) {
+            adapter.bondedDevices.orEmpty()
+                .filter {
+                    it.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
+                        it.type == BluetoothDevice.DEVICE_TYPE_DUAL
+                }
+                .map { (it.name ?: it.address) to it.address }
+                .sortedBy { it.first.lowercase(Locale.getDefault()) }
+        } else {
+            emptyList()
+        }
+    }
+    val options = listOf("Internal" to "") + devices
+    // A previously-selected device that is no longer paired still shows its raw MAC.
+    val currentLabel = options.firstOrNull { it.second == recordingSource }?.first ?: recordingSource
+
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("GPS device", style = MaterialTheme.typography.titleMedium)
+
+            var expanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
+            ) {
+                OutlinedTextField(
+                    value = currentLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Recording source") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    options.forEach { (label, mac) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                onSelectSource(mac)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+
+            if (!granted) {
+                Text(
+                    "Grant Bluetooth access to record from a paired external receiver.",
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(
+                    onClick = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Grant Bluetooth access")
+                }
+            } else if (recordingSource.isNotEmpty()) {
+                Text(
+                    "Records from the external receiver; the phone's own GPS stays free for navigation.",
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
 }
 
