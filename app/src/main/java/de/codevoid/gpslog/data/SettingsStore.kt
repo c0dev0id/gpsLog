@@ -30,6 +30,15 @@ class SettingsStore(context: Context) {
     )
     val filters: StateFlow<FilterSettings> = _filters.asStateFlow()
 
+    /** Recording source: `""` = the internal GPS chipset, otherwise a paired Bluetooth MAC. */
+    private val _recordingSource = MutableStateFlow(prefs.getString(KEY_SOURCE, "") ?: "")
+    val recordingSource: StateFlow<String> = _recordingSource.asStateFlow()
+
+    fun setRecordingSource(mac: String) {
+        prefs.edit().putString(KEY_SOURCE, mac).apply()
+        _recordingSource.value = mac
+    }
+
     fun setAccuracyMeters(value: Int) {
         prefs.edit().putInt(KEY_ACCURACY, value).apply()
         _filters.value = _filters.value.copy(accuracyMeters = value)
@@ -61,6 +70,7 @@ class SettingsStore(context: Context) {
         const val KEY_ACCURACY = "filter_accuracy_m"
         const val KEY_DISTANCE = "filter_distance_m"
         const val KEY_TIME = "filter_time_s"
+        const val KEY_SOURCE = "recording_source_mac"
         const val KEY_ACTIVE_RUN = "active_run_id"
         const val NO_RUN = -1L
     }

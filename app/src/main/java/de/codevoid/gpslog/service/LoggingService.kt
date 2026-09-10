@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -41,7 +42,7 @@ import java.util.concurrent.Executor
  * a run and resumes an interrupted run on system-driven restart (START_STICKY) or reboot
  * (BootReceiver).
  */
-class LoggingService : Service() {
+class LoggingService : Service(), FixSink {
 
     private lateinit var handlerThread: HandlerThread
     private lateinit var handler: Handler
@@ -57,6 +58,7 @@ class LoggingService : Service() {
 
     // Handler-thread-only state.
     private var writer: RunWriter? = null
+    private var bluetoothSource: BluetoothNmeaSource? = null
     private var runId: Long = -1L
     private var startTimeMillis: Long = 0L
     private var pointCount: Long = 0
@@ -113,12 +115,23 @@ class LoggingService : Service() {
     }
 
     private fun startLogging(id: Long) {
-        // Coarse-only access does not throw: GPS_PROVIDER is silently fuzzed and throttled to one
-        // fix per 10 min and GnssStatus never fires. Refuse rather than record a dead run.
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "precise location not granted; refusing to log")
-            stopLoggingInternal(clearActive = true)
-            return
+        val source = settings.recordingSource.value
+        val internal = source.isEmpty()
+        // Internal: coarse-only access does not throw but GPS_PROVIDER is silently fuzzed and
+        // throttled to one fix per 10 min and GnssStatus never fires, so refuse rather than record a
+        // dead run. External: reading the socket needs BLUETOOTH_CONNECT.
+        if (internal) {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "precise location not granted; refusing to log")
+                stopLoggingInternal(clearActive = true)
+                return
+            }
+        } else {
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "BLUETOOTH_CONNECT not granted; refusing to log")
+                stopLoggingInternal(clearActive = true)
+                return
+            }
         }
         val file = runs.runFile(id)
         runId = id
@@ -134,27 +147,38 @@ class LoggingService : Service() {
                 runId = id,
                 startTimeMillis = startTimeMillis,
                 pointCount = pointCount,
-                gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+                // External "enabled" flips true once the first sentence arrives.
+                gpsEnabled = internal && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
             )
         )
-        try {
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, 0L, 0f, listener, handlerThread.looper,
-            )
-            if (!locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)) {
-                Log.w(TAG, "GnssStatus callback not registered; satellite info unavailable")
+        if (internal) {
+            try {
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, 0L, 0f, listener, handlerThread.looper,
+                )
+                if (!locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)) {
+                    Log.w(TAG, "GnssStatus callback not registered; satellite info unavailable")
+                }
+            } catch (e: SecurityException) {
+                stopLoggingInternal(clearActive = true)
+                return
             }
-        } catch (e: SecurityException) {
-            stopLoggingInternal(clearActive = true)
-            return
+        } else {
+            val adapter = getSystemService(BluetoothManager::class.java)?.adapter
+            if (adapter == null || !adapter.isEnabled) {
+                Log.w(TAG, "Bluetooth unavailable or disabled; refusing to log")
+                stopLoggingInternal(clearActive = true)
+                return
+            }
+            bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler).also { it.start() }
         }
         handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
     }
 
     private val listener = object : LocationListener {
-        override fun onLocationChanged(location: Location) = onFix(location)
-        override fun onProviderEnabled(provider: String) = setGpsEnabled(true)
-        override fun onProviderDisabled(provider: String) = setGpsEnabled(false)
+        override fun onLocationChanged(location: Location) = onFix(location.toRecord())
+        override fun onProviderEnabled(provider: String) = onSourceEnabled(true)
+        override fun onProviderDisabled(provider: String) = onSourceEnabled(false)
     }
 
     private val gnssCallback = object : GnssStatus.Callback() {
@@ -171,16 +195,28 @@ class LoggingService : Service() {
         override fun onSatelliteStatusChanged(status: GnssStatus) {
             var used = 0
             for (i in 0 until status.satelliteCount) if (status.usedInFix(i)) used++
-            onGnssStatus(visible = status.satelliteCount, usedInFix = used)
+            onSatelliteStatus(visible = status.satelliteCount, usedInFix = used)
         }
     }
 
-    private fun setGpsEnabled(enabled: Boolean) {
-        LoggingStateHolder.update { it.copy(gpsEnabled = enabled) }
+    /** [FixSink] — receiver/provider on/off; off also drops the (now meaningless) satellite state. */
+    override fun onSourceEnabled(enabled: Boolean) {
+        LoggingStateHolder.update {
+            if (enabled) {
+                it.copy(gpsEnabled = true)
+            } else {
+                it.copy(
+                    gpsEnabled = false,
+                    gnssRunning = false,
+                    satellitesVisible = 0,
+                    satellitesUsedInFix = 0,
+                )
+            }
+        }
     }
 
-    /** ~1 Hz from the GNSS engine; drives the notification only while there is no fix. */
-    private fun onGnssStatus(visible: Int, usedInFix: Int) {
+    /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
+    override fun onSatelliteStatus(visible: Int, usedInFix: Int) {
         LoggingStateHolder.update {
             it.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
         }
@@ -192,12 +228,13 @@ class LoggingService : Service() {
         }
     }
 
-    private fun onFix(location: Location) {
+    /** [FixSink] — one recorded fix, from the internal provider or an external NMEA source. */
+    override fun onFix(record: GpsRecord) {
         val w = writer ?: return
-        w.append(location.toRecord())
+        w.append(record)
         pointCount += 1
 
-        fixTimestampsNanos.addLast(location.elapsedRealtimeNanos)
+        fixTimestampsNanos.addLast(record.elapsedRealtimeNanos)
         while (fixTimestampsNanos.size > RATE_WINDOW) fixTimestampsNanos.removeFirst()
         val rate = computeRateHz()
 
@@ -208,9 +245,9 @@ class LoggingService : Service() {
                 it.copy(
                     pointCount = pointCount,
                     updateRateHz = rate,
-                    lastFixTimeMillis = location.time,
-                    speedMetersPerSecond = if (location.hasSpeed()) location.speed else null,
-                    accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+                    lastFixTimeMillis = record.timeMillis,
+                    speedMetersPerSecond = record.speed,
+                    accuracyMeters = record.accuracy,
                 )
             }
         }
@@ -242,6 +279,8 @@ class LoggingService : Service() {
 
     private fun stopLoggingInternal(clearActive: Boolean) {
         handler.removeCallbacks(flushRunnable)
+        bluetoothSource?.stop()
+        bluetoothSource = null
         try {
             locationManager.removeUpdates(listener)
             locationManager.unregisterGnssStatusCallback(gnssCallback)
@@ -261,6 +300,8 @@ class LoggingService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(flushRunnable)
+        bluetoothSource?.stop()
+        bluetoothSource = null
         try {
             locationManager.removeUpdates(listener)
             locationManager.unregisterGnssStatusCallback(gnssCallback)
