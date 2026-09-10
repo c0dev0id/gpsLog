@@ -1,11 +1,7 @@
 package de.codevoid.gpslog.ui
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +9,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,7 +32,6 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,23 +39,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.codevoid.gpslog.data.FilterSettings
 import de.codevoid.gpslog.data.RunInfo
 import de.codevoid.gpslog.service.LoggingState
-import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -119,7 +106,16 @@ fun GpsLogScreen(
                     selected = tab == 2,
                     enabled = selected.isNotEmpty(),
                     onClick = { tab = 2 },
-                    text = { Text(if (selected.isEmpty()) "Export" else "Export (${selected.size})") },
+                    text = {
+                        Text(
+                            if (selected.isEmpty()) "Export" else "Export (${selected.size})",
+                            color = if (selected.isEmpty()) {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            } else {
+                                Color.Unspecified
+                            },
+                        )
+                    },
                 )
             }
             when (tab) {
@@ -141,7 +137,8 @@ fun GpsLogScreen(
                     selected = selected,
                     activeRunId = if (state.isLogging) state.runId else null,
                     onToggleSelect = vm::toggleSelect,
-                    onDelete = vm::delete,
+                    onDeleteSelected = vm::deleteSelected,
+                    onMergeSelected = vm::mergeSelected,
                 )
                 else -> ExportTab(
                     modifier = Modifier.weight(1f),
@@ -205,9 +202,7 @@ private fun RecordTab(
             onStart = onStart,
             onStop = onStop,
         )
-        if (state.isLogging) {
-            LiveStats(state)
-        }
+        LiveStats(state)
         UpdateSection(
             installedVersion = installedVersion,
             updateState = updateState,
@@ -281,34 +276,65 @@ private fun RunsTab(
     selected: Set<Long>,
     activeRunId: Long?,
     onToggleSelect: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
+    onDeleteSelected: () -> Unit,
+    onMergeSelected: () -> Unit,
 ) {
-    if (runs.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(32.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                "No runs yet — start recording on the Record tab.",
-                color = MaterialTheme.colorScheme.outline,
-            )
-        }
-    } else {
-        LazyColumn(
-            modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(runs, key = { it.id }) { run ->
-                RunRow(
-                    run = run,
-                    selected = run.id in selected,
-                    isActive = run.id == activeRunId,
-                    onToggleSelect = { onToggleSelect(run.id) },
-                    onDelete = { onDelete(run.id) },
+    // The active run can be selected (for export) but not deleted or merged while it is logging.
+    val actionable = selected.count { it != activeRunId }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        if (runs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "No runs yet — start recording on the Record tab.",
+                    color = MaterialTheme.colorScheme.outline,
                 )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(runs, key = { it.id }) { run ->
+                    RunRow(
+                        run = run,
+                        selected = run.id in selected,
+                        isActive = run.id == activeRunId,
+                        onToggleSelect = { onToggleSelect(run.id) },
+                    )
+                }
+            }
+        }
+
+        if (selected.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onMergeSelected,
+                    enabled = actionable >= 2,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Merge ($actionable)")
+                }
+                Button(
+                    onClick = onDeleteSelected,
+                    enabled = actionable >= 1,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Delete ($actionable)")
+                }
             }
         }
     }
@@ -455,8 +481,10 @@ private fun StartStopButton(isLogging: Boolean, enabled: Boolean, onStart: () ->
     }
 }
 
+/** Always visible; before a run is started every live value reads "—". */
 @Composable
 private fun LiveStats(state: LoggingState) {
+    val logging = state.isLogging
     Card {
         Column(
             modifier = Modifier
@@ -467,17 +495,17 @@ private fun LiveStats(state: LoggingState) {
             Stat("Started", state.startTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
             Stat(
                 "GPS",
-                when {
+                if (!logging) "—" else when {
                     !state.gpsEnabled -> "Disabled"
                     !state.gnssRunning -> "Receiver off"
                     state.hasFix -> "Fix"
                     else -> "Searching"
                 },
-                highlight = state.gpsEnabled && state.hasFix,
+                highlight = if (logging) state.gpsEnabled && state.hasFix else null,
             )
-            Stat("Satellites", "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible")
-            Stat("Points", state.pointCount.toString())
-            Stat("Rate", String.format(Locale.US, "%.1f Hz", state.updateRateHz))
+            Stat("Satellites", if (logging) "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible" else "—")
+            Stat("Points", if (logging) state.pointCount.toString() else "—")
+            Stat("Rate", if (logging) String.format(Locale.US, "%.1f Hz", state.updateRateHz) else "—")
             Stat("GPS time", state.lastFixTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
             Stat("Speed", state.speedMetersPerSecond?.let { String.format(Locale.US, "%.1f m/s", it) } ?: "—")
             Stat("Accuracy", state.accuracyMeters?.let { String.format(Locale.US, "%.1f m", it) } ?: "—")
@@ -545,11 +573,9 @@ private fun FloatFilterField(
 }
 
 /**
- * Selection is an explicit leading checkbox; delete is a two-step swipe-to-reveal: dragging the
- * card left uncovers a Delete button that must be tapped to confirm. A plain [draggable] +
- * [Animatable] is used (not AnchoredDraggable) because those APIs are stable across Compose
- * releases and this project cannot be built locally to catch breakage. The active run cannot be
- * revealed, so it cannot be deleted while logging.
+ * Selection is an explicit checkbox; the whole card is also clickable to toggle it. Deletion and
+ * merging act on the multiselection from the buttons below the list, so the row carries no per-row
+ * action. The active run still shows its recording dot and cannot be deleted or merged.
  */
 @Composable
 private fun RunRow(
@@ -557,88 +583,41 @@ private fun RunRow(
     selected: Boolean,
     isActive: Boolean,
     onToggleSelect: () -> Unit,
-    onDelete: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val revealPx = with(LocalDensity.current) { 88.dp.toPx() }
-    val offsetX = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-
-    Box(
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = if (selected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clickable { onToggleSelect() },
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(MaterialTheme.colorScheme.errorContainer),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            TextButton(
-                onClick = {
-                    onDelete()
-                    scope.launch { offsetX.snapTo(0f) }
-                },
-                modifier = Modifier.width(88.dp),
-            ) {
-                Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-        }
-
-        Card(
-            shape = shape,
-            colors = if (selected) {
-                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            } else {
-                CardDefaults.cardColors()
-            },
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .draggable(
-                    enabled = !isActive,
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta ->
-                        scope.launch {
-                            offsetX.snapTo((offsetX.value + delta).coerceIn(-revealPx, 0f))
-                        }
-                    },
-                    onDragStopped = {
-                        val target = if (offsetX.value < -revealPx / 2f) -revealPx else 0f
-                        offsetX.animateTo(target)
-                    },
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures {
-                        if (offsetX.value != 0f) scope.launch { offsetX.animateTo(0f) }
-                    }
-                },
+                .padding(end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(end = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(dateTimeFmt.format(Instant.ofEpochMilli(run.startTimeMillis)))
-                    Text(
-                        "→ ${dateTimeFmt.format(Instant.ofEpochMilli(run.endTimeMillis))}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                }
-                Text("${run.pointCount} pts")
-                if (isActive) {
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .size(10.dp)
-                            .background(MaterialTheme.colorScheme.error, CircleShape)
-                    )
-                }
+            Checkbox(checked = selected, onCheckedChange = null)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(dateTimeFmt.format(Instant.ofEpochMilli(run.startTimeMillis)))
+                Text(
+                    "→ ${dateTimeFmt.format(Instant.ofEpochMilli(run.endTimeMillis))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+            Text("${run.pointCount} pts")
+            if (isActive) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .size(10.dp)
+                        .background(MaterialTheme.colorScheme.error, CircleShape)
+                )
             }
         }
     }

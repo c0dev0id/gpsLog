@@ -167,10 +167,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSelect(id: Long) = _selected.update { if (id in it) it - id else it + id }
 
-    fun delete(id: Long) {
+    /** The active run cannot be deleted or merged while it is being written to. */
+    private fun activeRunId(): Long? = loggingState.value.let { if (it.isLogging) it.runId else null }
+
+    /** Ids in the current selection that may be modified (everything except the active run). */
+    private fun deletableSelection(selected: Set<Long>): Set<Long> = selected - setOfNotNull(activeRunId())
+
+    fun deleteSelected() {
+        val ids = deletableSelection(_selected.value)
+        if (ids.isEmpty()) return
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { repo.delete(id) }
-            _selected.update { it - id }
+            withContext(Dispatchers.IO) { ids.forEach { repo.delete(it) } }
+            _selected.update { it - ids }
+            refreshRuns()
+        }
+    }
+
+    fun mergeSelected() {
+        val ids = deletableSelection(_selected.value)
+        if (ids.size < 2) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repo.merge(ids.toList()) }
+            _selected.value = emptySet()
             refreshRuns()
         }
     }
