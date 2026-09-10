@@ -1,6 +1,11 @@
 package de.codevoid.gpslog.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,45 +13,61 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.codevoid.gpslog.data.FilterSettings
 import de.codevoid.gpslog.data.RunInfo
 import de.codevoid.gpslog.service.LoggingState
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
@@ -65,63 +86,179 @@ fun GpsLogScreen(
     val selected by vm.selected.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
 
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("gpsLog") }) }
     ) { padding ->
-        // One lazy list for the whole screen so the controls scroll with the runs
-        // (in landscape the list would otherwise start below the visible area).
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (!preciseLocation) {
-                item(key = "precise") { PreciseLocationBanner(onOpenSettings) }
-            }
-            item(key = "start") {
-                StartStopButton(
-                    isLogging = state.isLogging,
-                    enabled = preciseLocation || state.isLogging,
-                    onStart = vm::start,
-                    onStop = vm::stop,
+            PrimaryTabRow(selectedTabIndex = tab) {
+                Tab(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    text = { RecordTabLabel(isLogging = state.isLogging) },
+                )
+                Tab(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    text = { Text("Runs") },
                 )
             }
-            if (state.isLogging) {
-                item(key = "stats") { LiveStats(state) }
-            }
-            item(key = "filters") {
-                FilterControls(
+            when (tab) {
+                0 -> RecordTab(
+                    modifier = Modifier.weight(1f),
+                    state = state,
+                    preciseLocation = preciseLocation,
+                    onStart = vm::start,
+                    onStop = vm::stop,
+                    onOpenSettings = onOpenSettings,
+                )
+                else -> RunsTab(
+                    modifier = Modifier.weight(1f),
+                    runs = runs,
+                    selected = selected,
+                    activeRunId = if (state.isLogging) state.runId else null,
                     filters = filters,
+                    onToggleSelect = vm::toggleSelect,
+                    onDelete = vm::delete,
                     onAccuracy = vm::setAccuracyMeters,
                     onDistance = vm::setDistanceMeters,
                     onTime = vm::setTimeSeconds,
-                )
-            }
-            item(key = "export") {
-                ExportControls(
-                    selectedCount = selected.size,
                     onSave = onSave,
                     onShare = onShare,
                 )
             }
-            item(key = "runs-header") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HorizontalDivider()
-                    Text("Runs", style = MaterialTheme.typography.titleMedium)
-                }
-            }
-            items(runs, key = { it.id }) { run ->
-                RunRow(
-                    run = run,
-                    selected = run.id in selected,
-                    isActive = run.id == state.runId && state.isLogging,
-                    onToggleSelect = { vm.toggleSelect(run.id) },
-                    onDelete = { vm.delete(run.id) },
+        }
+    }
+}
+
+@Composable
+private fun RecordTabLabel(isLogging: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Record")
+        if (isLogging) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(MaterialTheme.colorScheme.error, CircleShape)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordTab(
+    modifier: Modifier,
+    state: LoggingState,
+    preciseLocation: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (!preciseLocation) {
+            PreciseLocationBanner(onOpenSettings)
+        }
+        StartStopButton(
+            isLogging = state.isLogging,
+            enabled = preciseLocation || state.isLogging,
+            onStart = onStart,
+            onStop = onStop,
+        )
+        if (state.isLogging) {
+            LiveStats(state)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RunsTab(
+    modifier: Modifier,
+    runs: List<RunInfo>,
+    selected: Set<Long>,
+    activeRunId: Long?,
+    filters: FilterSettings,
+    onToggleSelect: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+    onAccuracy: (Int) -> Unit,
+    onDistance: (Float) -> Unit,
+    onTime: (Int) -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+) {
+    var showSheet by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        if (runs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "No runs yet — start recording on the Record tab.",
+                    color = MaterialTheme.colorScheme.outline,
                 )
             }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(runs, key = { it.id }) { run ->
+                    RunRow(
+                        run = run,
+                        selected = run.id in selected,
+                        isActive = run.id == activeRunId,
+                        onToggleSelect = { onToggleSelect(run.id) },
+                        onDelete = { onDelete(run.id) },
+                    )
+                }
+            }
         }
+
+        if (selected.isNotEmpty()) {
+            Surface(tonalElevation = 3.dp) {
+                Button(
+                    onClick = { showSheet = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                ) {
+                    Text("Export (${selected.size})")
+                }
+            }
+        }
+    }
+
+    if (showSheet) {
+        ExportSheet(
+            count = selected.size,
+            filters = filters,
+            onAccuracy = onAccuracy,
+            onDistance = onDistance,
+            onTime = onTime,
+            onSave = { showSheet = false; onSave() },
+            onShare = { showSheet = false; onShare() },
+            onDismiss = { showSheet = false },
+        )
     }
 }
 
@@ -210,37 +347,53 @@ private fun Stat(label: String, value: String, highlight: Boolean? = null) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterControls(
+private fun ExportSheet(
+    count: Int,
     filters: FilterSettings,
     onAccuracy: (Int) -> Unit,
     onDistance: (Float) -> Unit,
     onTime: (Int) -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        IntFilterField(
-            label = "Accuracy m",
-            value = filters.accuracyMeters,
-            range = 1..999,
-            onChange = onAccuracy,
-            modifier = Modifier.weight(1f),
-        )
-        FloatFilterField(
-            label = "Distance m",
-            value = filters.distanceMeters,
-            onChange = onDistance,
-            modifier = Modifier.weight(1f),
-        )
-        IntFilterField(
-            label = "Time s",
-            value = filters.timeSeconds,
-            range = 0..999,
-            onChange = onTime,
-            modifier = Modifier.weight(1f),
-        )
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("Export $count ${if (count == 1) "run" else "runs"}", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IntFilterField(
+                    label = "Accuracy m",
+                    value = filters.accuracyMeters,
+                    range = 1..999,
+                    onChange = onAccuracy,
+                    modifier = Modifier.weight(1f),
+                )
+                FloatFilterField(
+                    label = "Distance m",
+                    value = filters.distanceMeters,
+                    onChange = onDistance,
+                    modifier = Modifier.weight(1f),
+                )
+                IntFilterField(
+                    label = "Time s",
+                    value = filters.timeSeconds,
+                    range = 0..999,
+                    onChange = onTime,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f)) { Text("Save file") }
+                Button(onClick = onShare, modifier = Modifier.weight(1f)) { Text("Share") }
+            }
+        }
     }
 }
 
@@ -287,26 +440,13 @@ private fun FloatFilterField(
     )
 }
 
-@Composable
-private fun ExportControls(selectedCount: Int, onSave: () -> Unit, onShare: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedButton(
-            onClick = onSave,
-            enabled = selectedCount > 0,
-            modifier = Modifier.weight(1f),
-        ) { Text("Save ($selectedCount)") }
-        OutlinedButton(
-            onClick = onShare,
-            enabled = selectedCount > 0,
-            modifier = Modifier.weight(1f),
-        ) { Text("Share ($selectedCount)") }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Selection is an explicit leading checkbox; delete is a two-step swipe-to-reveal: dragging the
+ * card left uncovers a Delete button that must be tapped to confirm. A plain [draggable] +
+ * [Animatable] is used (not AnchoredDraggable) because those APIs are stable across Compose
+ * releases and this project cannot be built locally to catch breakage. The active run cannot be
+ * revealed, so it cannot be deleted while logging.
+ */
 @Composable
 private fun RunRow(
     run: RunInfo,
@@ -315,64 +455,69 @@ private fun RunRow(
     onToggleSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    onToggleSelect()
-                    false
-                }
-                SwipeToDismissBoxValue.EndToStart -> {
+    val shape = RoundedCornerShape(12.dp)
+    val revealPx = with(LocalDensity.current) { 88.dp.toPx() }
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(MaterialTheme.colorScheme.errorContainer),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            TextButton(
+                onClick = {
                     onDelete()
-                    true
-                }
-                SwipeToDismissBoxValue.Settled -> false
+                    scope.launch { offsetX.snapTo(0f) }
+                },
+                modifier = Modifier.width(88.dp),
+            ) {
+                Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-    )
 
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromEndToStart = !isActive,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primaryContainer
-                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                SwipeToDismissBoxValue.Settled -> Color.Transparent
-            }
-            val alignment = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                else -> Alignment.CenterEnd
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = alignment,
-            ) {
-                when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> Text("Select")
-                    SwipeToDismissBoxValue.EndToStart -> Text("Delete")
-                    SwipeToDismissBoxValue.Settled -> {}
-                }
-            }
-        },
-    ) {
         Card(
+            shape = shape,
             colors = if (selected) {
                 CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             } else {
                 CardDefaults.cardColors()
             },
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .draggable(
+                    enabled = !isActive,
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        scope.launch {
+                            offsetX.snapTo((offsetX.value + delta).coerceIn(-revealPx, 0f))
+                        }
+                    },
+                    onDragStopped = {
+                        val target = if (offsetX.value < -revealPx / 2f) -revealPx else 0f
+                        offsetX.animateTo(target)
+                    },
+                )
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        if (offsetX.value != 0f) scope.launch { offsetX.animateTo(0f) }
+                    }
+                },
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
                 Column(modifier = Modifier.weight(1f)) {
                     Text(dateTimeFmt.format(Instant.ofEpochMilli(run.startTimeMillis)))
                     Text(
@@ -382,14 +527,6 @@ private fun RunRow(
                     )
                 }
                 Text("${run.pointCount} pts")
-                if (selected) {
-                    Text(
-                        "✓",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 12.dp),
-                    )
-                }
                 if (isActive) {
                     Box(
                         modifier = Modifier
