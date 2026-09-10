@@ -61,8 +61,10 @@ class NmeaParser {
         val body = line.substring(start + 1, star)
         var xor = 0
         for (c in body) xor = xor xor c.code
-        val expected = line.substring(star + 1, star + 3)
-        if (!xor.toString(16).padStart(2, '0').equals(expected, ignoreCase = true)) return null
+        // Compare the two checksum hex digits as an int; runs per line, so allocate no string.
+        val hi = Character.digit(line[star + 1], 16)
+        val lo = Character.digit(line[star + 2], 16)
+        if (hi < 0 || lo < 0 || xor != ((hi shl 4) or lo)) return null
         return body
     }
 

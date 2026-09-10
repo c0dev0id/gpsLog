@@ -120,18 +120,13 @@ class LoggingService : Service(), FixSink {
         // Internal: coarse-only access does not throw but GPS_PROVIDER is silently fuzzed and
         // throttled to one fix per 10 min and GnssStatus never fires, so refuse rather than record a
         // dead run. External: reading the socket needs BLUETOOTH_CONNECT.
-        if (internal) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "precise location not granted; refusing to log")
-                stopLoggingInternal(clearActive = true)
-                return
-            }
-        } else {
-            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "BLUETOOTH_CONNECT not granted; refusing to log")
-                stopLoggingInternal(clearActive = true)
-                return
-            }
+        val required =
+            if (internal) Manifest.permission.ACCESS_FINE_LOCATION
+            else Manifest.permission.BLUETOOTH_CONNECT
+        if (checkSelfPermission(required) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "$required not granted; refusing to log")
+            stopLoggingInternal(clearActive = true)
+            return
         }
         val file = runs.runFile(id)
         runId = id
@@ -236,11 +231,11 @@ class LoggingService : Service(), FixSink {
 
         fixTimestampsNanos.addLast(record.elapsedRealtimeNanos)
         while (fixTimestampsNanos.size > RATE_WINDOW) fixTimestampsNanos.removeFirst()
-        val rate = computeRateHz()
 
         val nowMs = SystemClock.elapsedRealtime()
         if (nowMs - lastUiUpdateMs >= UI_THROTTLE_MS) {
             lastUiUpdateMs = nowMs
+            val rate = computeRateHz()
             LoggingStateHolder.update {
                 it.copy(
                     pointCount = pointCount,
@@ -253,6 +248,7 @@ class LoggingService : Service(), FixSink {
         }
         if (nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS) {
             lastNotifUpdateMs = nowMs
+            val rate = computeRateHz()
             updateNotification(
                 getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
             )

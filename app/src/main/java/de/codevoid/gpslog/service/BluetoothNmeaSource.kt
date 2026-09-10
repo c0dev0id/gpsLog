@@ -68,9 +68,9 @@ class BluetoothNmeaSource(
                     ) {
                         lastVisible = result.satellitesVisible
                         lastUsed = result.satellitesUsedInFix
-                        val visible = result.satellitesVisible
-                        val used = result.satellitesUsedInFix
-                        deliver.post { sink.onSatelliteStatus(visible, used) }
+                        deliver.post {
+                            sink.onSatelliteStatus(result.satellitesVisible, result.satellitesUsedInFix)
+                        }
                     }
                     result.record?.let { record -> deliver.post { sink.onFix(record) } }
                 }
