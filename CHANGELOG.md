@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Live stats show the GPS state (disabled / receiver off / searching / fix) and the number of satellites used in the fix and visible, so a run recording no points explains why; the notification shows the satellite count while waiting for a fix
 - In-app updater on the Settings tab: checks the published nightly on GitHub and, when it differs from the installed build, downloads the signed APK and hands it to the system installer (an in-place update requires the installed build to be signed with the same key)
 - Merge combines several selected runs into a single run: their points are read, merged in time order and written to one file, and the originals are removed
+- Debug NMEA log: a Settings switch that, while recording from a Bluetooth receiver, tees the raw NMEA stream (timestamped, plus connect/disconnect notes) to a text file, with a button to share the latest capture — for diagnosing the receiver's constellations, delivery rate and HDOP
 - Recording source can be an external classic-Bluetooth GNSS receiver: the Settings tab has a "GPS device" picker listing the internal GPS plus paired Bluetooth devices, so the phone's own GPS stays free for navigation while a run records from the external receiver. Fixes are read as NMEA (GGA + RMC) over the serial-port profile; accuracy is derived from HDOP so the points survive the export accuracy filter
 
 ### Changed
