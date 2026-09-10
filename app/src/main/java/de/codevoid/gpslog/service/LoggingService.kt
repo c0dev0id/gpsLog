@@ -15,6 +15,7 @@ import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.location.OnNmeaMessageListener
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
@@ -60,6 +61,7 @@ class LoggingService : Service(), FixSink {
     // Handler-thread-only state.
     private var writer: RunWriter? = null
     private var bluetoothSource: BluetoothNmeaSource? = null
+    private var debugLog: NmeaDebugLog? = null
     private var runId: Long = -1L
     private var startTimeMillis: Long = 0L
     private var pointCount: Long = 0
@@ -147,6 +149,11 @@ class LoggingService : Service(), FixSink {
                 gpsEnabled = internal && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
             )
         )
+        val debugFile = if (settings.debugLogging.value) {
+            File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$id.log")
+        } else {
+            null
+        }
         if (internal) {
             try {
                 locationManager.requestLocationUpdates(
@@ -159,17 +166,23 @@ class LoggingService : Service(), FixSink {
                 stopLoggingInternal(clearActive = true)
                 return
             }
+            // Debug: dump the chipset's identity/capabilities and tee its NMEA, at the fix rate the
+            // HAL emits — the only app-level probe of the internal receiver's real rate/constellations.
+            debugFile?.let { f ->
+                debugLog = runCatching { NmeaDebugLog(f) }.getOrNull()?.also { log ->
+                    log.note("session start; internal GPS_PROVIDER")
+                    log.note("hardwareModel=${locationManager.gnssHardwareModelName ?: "unknown"}")
+                    log.note("hardwareYear=${locationManager.gnssYearOfHardware}")
+                    log.note("capabilities=${locationManager.gnssCapabilities}")
+                    runCatching { locationManager.addNmeaListener(handlerExecutor, nmeaListener) }
+                }
+            }
         } else {
             val adapter = getSystemService(BluetoothManager::class.java)?.adapter
             if (adapter == null || !adapter.isEnabled) {
                 Log.w(TAG, "Bluetooth unavailable or disabled; refusing to log")
                 stopLoggingInternal(clearActive = true)
                 return
-            }
-            val debugFile = if (settings.debugLogging.value) {
-                File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$id.log")
-            } else {
-                null
             }
             bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler, debugFile)
                 .also { it.start() }
@@ -182,6 +195,9 @@ class LoggingService : Service(), FixSink {
         override fun onProviderEnabled(provider: String) = onSourceEnabled(true)
         override fun onProviderDisabled(provider: String) = onSourceEnabled(false)
     }
+
+    /** Debug only: tees the internal chipset's NMEA (delivered on the handler thread) to the log. */
+    private val nmeaListener = OnNmeaMessageListener { message, _ -> debugLog?.line(message.trim()) }
 
     private val gnssCallback = object : GnssStatus.Callback() {
         override fun onStarted() {
@@ -287,8 +303,12 @@ class LoggingService : Service(), FixSink {
         try {
             locationManager.removeUpdates(listener)
             locationManager.unregisterGnssStatusCallback(gnssCallback)
+            locationManager.removeNmeaListener(nmeaListener)
         } catch (_: Exception) {
         }
+        debugLog?.note("session end")
+        debugLog?.close()
+        debugLog = null
         writer?.close()
         writer = null
         running = false
@@ -308,8 +328,12 @@ class LoggingService : Service(), FixSink {
         try {
             locationManager.removeUpdates(listener)
             locationManager.unregisterGnssStatusCallback(gnssCallback)
+            locationManager.removeNmeaListener(nmeaListener)
         } catch (_: Exception) {
         }
+        debugLog?.note("session end")
+        debugLog?.close()
+        debugLog = null
         writer?.close()
         writer = null
         releaseWakeLock()

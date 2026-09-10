@@ -433,9 +433,9 @@ private fun UpdateSection(
 }
 
 /**
- * Diagnostics: when enabled, an external-source run tees its raw NMEA stream to a text file so the
- * receiver's constellations, rate and HDOP can be inspected. Only meaningful for a Bluetooth source
- * (the internal provider emits no NMEA).
+ * Diagnostics: when enabled, a run captures a text log — the raw NMEA plus, for the internal GPS,
+ * the chipset model and capabilities — so the receiver's constellations, delivery rate and HDOP can
+ * be inspected. Works for both sources (the internal chipset's NMEA is read via `addNmeaListener`).
  */
 @Composable
 private fun DebugSection(
@@ -459,7 +459,8 @@ private fun DebugSection(
                 Switch(checked = debugLogging, onCheckedChange = onSetDebugLogging)
             }
             Text(
-                "Records the raw NMEA from the external receiver to a text file you can share.",
+                "Records the raw NMEA to a text file you can share — plus the chipset model and " +
+                    "capabilities when the internal GPS is selected.",
                 color = MaterialTheme.colorScheme.outline,
                 style = MaterialTheme.typography.bodySmall,
             )
