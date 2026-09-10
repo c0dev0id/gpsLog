@@ -12,9 +12,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
 import androidx.core.content.FileProvider
 import de.codevoid.gpslog.ui.GpsLogScreen
+import de.codevoid.gpslog.ui.GpsLogTheme
 import de.codevoid.gpslog.ui.MainViewModel
 import java.io.File
 import java.time.Instant
@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestPermissionsUpFront()
         setContent {
-            MaterialTheme {
+            GpsLogTheme {
                 GpsLogScreen(
                     vm = vm,
                     onSave = { createDocument.launch(suggestedName()) },
