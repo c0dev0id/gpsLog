@@ -20,7 +20,6 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
-import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import de.codevoid.gpslog.App
@@ -53,7 +52,6 @@ class LoggingService : Service(), FixSink {
     private lateinit var locationManager: LocationManager
     private lateinit var settings: SettingsStore
     private lateinit var runs: RunRepository
-    private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile
     private var running = false
@@ -75,8 +73,6 @@ class LoggingService : Service(), FixSink {
         settings = app.settings
         runs = app.runs
         locationManager = getSystemService(LocationManager::class.java)
-        val pm = getSystemService(PowerManager::class.java)
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gpslog:logging")
         createChannel()
         handlerThread = HandlerThread("gps-logger").apply { start() }
         handler = Handler(handlerThread.looper)
@@ -234,9 +230,13 @@ class LoggingService : Service(), FixSink {
 
     /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
     override fun onSatelliteStatus(visible: Int, usedInFix: Int) {
-        if (LoggingStateHolder.uiVisible) {
-            LoggingStateHolder.update {
-                it.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
+        LoggingStateHolder.update { state ->
+            if (LoggingStateHolder.uiVisible) {
+                state.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
+            } else {
+                // gnssRunning must stay accurate for the BT path (the only signal the receiver is live).
+                // StateFlow skips emission when the value is unchanged, so this is free once it's true.
+                state.copy(gnssRunning = true)
             }
         }
         if (usedInFix > 0) return
@@ -257,25 +257,28 @@ class LoggingService : Service(), FixSink {
         while (fixTimestampsNanos.size > RATE_WINDOW) fixTimestampsNanos.removeFirst()
 
         val nowMs = SystemClock.elapsedRealtime()
-        if (LoggingStateHolder.uiVisible && nowMs - lastUiUpdateMs >= UI_THROTTLE_MS) {
-            lastUiUpdateMs = nowMs
+        val uiDue = LoggingStateHolder.uiVisible && nowMs - lastUiUpdateMs >= UI_THROTTLE_MS
+        val notifDue = nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS
+        if (uiDue || notifDue) {
             val rate = computeRateHz()
-            LoggingStateHolder.update {
-                it.copy(
-                    pointCount = pointCount,
-                    updateRateHz = rate,
-                    lastFixTimeMillis = record.timeMillis,
-                    speedMetersPerSecond = record.speed,
-                    accuracyMeters = record.accuracy,
+            if (uiDue) {
+                lastUiUpdateMs = nowMs
+                LoggingStateHolder.update {
+                    it.copy(
+                        pointCount = pointCount,
+                        updateRateHz = rate,
+                        lastFixTimeMillis = record.timeMillis,
+                        speedMetersPerSecond = record.speed,
+                        accuracyMeters = record.accuracy,
+                    )
+                }
+            }
+            if (notifDue) {
+                lastNotifUpdateMs = nowMs
+                updateNotification(
+                    getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
                 )
             }
-        }
-        if (nowMs - lastNotifUpdateMs >= NOTIF_THROTTLE_MS) {
-            lastNotifUpdateMs = nowMs
-            val rate = computeRateHz()
-            updateNotification(
-                getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
-            )
         }
     }
 
@@ -316,7 +319,6 @@ class LoggingService : Service(), FixSink {
         if (clearActive) settings.clearActiveRun()
         LoggingStateHolder.reset()
         mainHandler.post {
-            releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -337,17 +339,8 @@ class LoggingService : Service(), FixSink {
         debugLog = null
         writer?.close()
         writer = null
-        releaseWakeLock()
         handlerThread.quitSafely()
         super.onDestroy()
-    }
-
-    private fun acquireWakeLock() {
-        wakeLock?.let { if (!it.isHeld) it.acquire() }
-    }
-
-    private fun releaseWakeLock() {
-        wakeLock?.let { if (it.isHeld) it.release() }
     }
 
     private fun createChannel() {
