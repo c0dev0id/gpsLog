@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.FileProvider
+import de.codevoid.gpslog.service.LoggingStateHolder
 import de.codevoid.gpslog.ui.GpsLogScreen
 import de.codevoid.gpslog.ui.GpsLogTheme
 import de.codevoid.gpslog.ui.MainViewModel
@@ -57,10 +58,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        LoggingStateHolder.uiVisible = true
         vm.setPreciseLocation(
             checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         )
         vm.refreshRuns()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        LoggingStateHolder.uiVisible = false
     }
 
     private fun requestPermissionsUpFront() {

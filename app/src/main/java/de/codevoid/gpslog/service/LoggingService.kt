@@ -234,8 +234,10 @@ class LoggingService : Service(), FixSink {
 
     /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
     override fun onSatelliteStatus(visible: Int, usedInFix: Int) {
-        LoggingStateHolder.update {
-            it.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
+        if (LoggingStateHolder.uiVisible) {
+            LoggingStateHolder.update {
+                it.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)
+            }
         }
         if (usedInFix > 0) return
         val nowMs = SystemClock.elapsedRealtime()
@@ -255,7 +257,7 @@ class LoggingService : Service(), FixSink {
         while (fixTimestampsNanos.size > RATE_WINDOW) fixTimestampsNanos.removeFirst()
 
         val nowMs = SystemClock.elapsedRealtime()
-        if (nowMs - lastUiUpdateMs >= UI_THROTTLE_MS) {
+        if (LoggingStateHolder.uiVisible && nowMs - lastUiUpdateMs >= UI_THROTTLE_MS) {
             lastUiUpdateMs = nowMs
             val rate = computeRateHz()
             LoggingStateHolder.update {

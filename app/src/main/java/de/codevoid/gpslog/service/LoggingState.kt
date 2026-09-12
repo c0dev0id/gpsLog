@@ -30,8 +30,13 @@ data class LoggingState(
  * Process-global holder for [LoggingState]. The service writes it at the (throttled) UI rate; the
  * ViewModel collects it. Single process, so a plain singleton is sufficient — no Binder needed.
  * State does not survive process death; "is a run active" is authoritative in SettingsStore.
+ *
+ * [uiVisible] is flipped by MainActivity.onResume/onPause so the service can skip StateFlow
+ * updates when no UI is watching — saves allocations and Compose recompositions in background.
  */
 object LoggingStateHolder {
+    @Volatile var uiVisible: Boolean = false
+
     private val _state = MutableStateFlow(LoggingState())
     val state: StateFlow<LoggingState> = _state.asStateFlow()
 
