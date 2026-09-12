@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Recording now holds no wake lock: the foreground-service location type + GPS hardware keeps the relevant subsystems running without pinning the CPU, reducing heat significantly during long runs
+- Write durability relaxed: fdatasync removed from the periodic flush (OS page cache is sufficient; only a power-loss crash risks data loss, which is acceptable) and the flush interval extended from 10 s to 60 s
+- All status updates (UI state and notification) throttled to 2 s; UI state updates are skipped entirely when the app is in background — no allocations or Compose recompositions during background recording
+- Bluetooth satellite status posts throttled to 2 s regardless of how frequently GSV sentences arrive (was effectively ~12/s at 4 Hz with 3 constellation talkers)
+
 ### Added
 - GPS logging foreground service recording raw `GPS_PROVIDER` fixes at the chipset's native rate, logging every field the fix offers (position, time, altitude, accuracy, speed, bearing and their accuracies)
 - Single Compose screen: start/stop button reflecting service state, live stats (start time, points, update rate, GPS time, speed, accuracy), and a list of past runs
