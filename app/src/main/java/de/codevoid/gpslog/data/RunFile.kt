@@ -34,14 +34,13 @@ class RunWriter(private val file: File) {
     @Synchronized
     fun bufferedCount(): Int = buffer.size
 
-    /** Write and fsync everything buffered so far. No-op when the buffer is empty. */
+    /** Write everything buffered so far to the OS page cache. No-op when the buffer is empty. */
     @Synchronized
     fun flush() {
         if (buffer.isEmpty()) return
         FileOutputStream(file, true).use { fos ->
             for (bytes in buffer) fos.write(bytes)
             fos.flush()
-            fos.fd.sync()
         }
         buffer.clear()
     }

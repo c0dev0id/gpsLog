@@ -113,7 +113,6 @@ class LoggingService : Service(), FixSink {
             buildNotification(getString(R.string.notif_starting)),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
-        acquireWakeLock()
         handler.post { startLogging(id) }
     }
 
@@ -381,9 +380,9 @@ class LoggingService : Service(), FixSink {
         private const val TAG = "LoggingService"
         private const val CHANNEL_ID = "logging"
         private const val NOTIF_ID = 1
-        private const val FLUSH_INTERVAL_MS = 10_000L
-        private const val UI_THROTTLE_MS = 250L
-        private const val NOTIF_THROTTLE_MS = 1_000L
+        private const val FLUSH_INTERVAL_MS = 60_000L
+        private const val UI_THROTTLE_MS = 2_000L
+        private const val NOTIF_THROTTLE_MS = 2_000L
         private const val RATE_WINDOW = 10
 
         fun start(context: Context) {
