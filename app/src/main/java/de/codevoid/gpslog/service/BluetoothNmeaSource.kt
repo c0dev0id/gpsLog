@@ -57,6 +57,7 @@ class BluetoothNmeaSource(
             while (running) {
                 var lastVisible = -1
                 var lastUsed = -1
+                var lastSatPostMs = 0L
                 val parser = NmeaParser()
                 try {
                     debug?.note("connecting")
@@ -71,11 +72,13 @@ class BluetoothNmeaSource(
                         val line = reader.readLine() ?: break
                         debug?.line(line)
                         val result = parser.parse(line, SystemClock.elapsedRealtimeNanos())
-                        if (result.satellitesVisible != lastVisible ||
-                            result.satellitesUsedInFix != lastUsed
+                        val nowMs = SystemClock.elapsedRealtime()
+                        if ((result.satellitesVisible != lastVisible || result.satellitesUsedInFix != lastUsed) &&
+                            nowMs - lastSatPostMs >= SAT_THROTTLE_MS
                         ) {
                             lastVisible = result.satellitesVisible
                             lastUsed = result.satellitesUsedInFix
+                            lastSatPostMs = nowMs
                             deliver.post {
                                 sink.onSatelliteStatus(result.satellitesVisible, result.satellitesUsedInFix)
                             }
@@ -119,6 +122,7 @@ class BluetoothNmeaSource(
     private companion object {
         const val TAG = "BluetoothNmeaSource"
         const val RECONNECT_DELAY_MS = 3_000L
+        const val SAT_THROTTLE_MS = 2_000L
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 }
