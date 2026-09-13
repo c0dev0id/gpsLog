@@ -235,16 +235,18 @@ class LoggingService : Service(), FixSink {
 
     private fun setPaused(value: Boolean) {
         paused = value
+        // Stamp the throttle clock so onSatelliteStatus cannot overwrite this notification for 2 s.
+        lastNotifUpdateMs = SystemClock.elapsedRealtime()
+        if (!value) fixTimestampsNanos.clear()
         LoggingStateHolder.update { it.copy(isPaused = value) }
-        if (value) {
-            updateNotification(getString(R.string.notif_paused, pointCount))
-        } else {
-            val rate = computeRateHz()
-            updateNotification(
-                getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
-            )
-        }
+        updateNotification(
+            if (value) getString(R.string.notif_paused, pointCount)
+            else loggingNotifText()
+        )
     }
+
+    private fun loggingNotifText(rate: Float = computeRateHz()): String =
+        getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
 
     /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
     override fun onSatelliteStatus(visible: Int, usedInFix: Int) {
@@ -294,9 +296,7 @@ class LoggingService : Service(), FixSink {
             }
             if (notifDue) {
                 lastNotifUpdateMs = nowMs
-                updateNotification(
-                    getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
-                )
+                updateNotification(loggingNotifText(rate))
             }
         }
     }
@@ -401,31 +401,14 @@ class LoggingService : Service(), FixSink {
         private const val NOTIF_THROTTLE_MS = 2_000L
         private const val RATE_WINDOW = 10
 
-        fun start(context: Context) {
-            context.startForegroundService(
-                Intent(context, LoggingService::class.java).setAction(ACTION_START)
-            )
-        }
+        fun start(context: Context) = context.startForegroundService(intent(context, ACTION_START))
+        fun stop(context: Context) = context.startService(intent(context, ACTION_STOP))
+        fun resume(context: Context) = context.startForegroundService(intent(context, ACTION_RESUME))
+        fun pause(context: Context) = context.startService(intent(context, ACTION_PAUSE))
+        fun unpause(context: Context) = context.startService(intent(context, ACTION_UNPAUSE))
 
-        fun stop(context: Context) {
-            context.startService(
-                Intent(context, LoggingService::class.java).setAction(ACTION_STOP)
-            )
-        }
-
-        fun resume(context: Context) {
-            context.startForegroundService(
-                Intent(context, LoggingService::class.java).setAction(ACTION_RESUME)
-            )
-        }
-
-        fun pause(context: Context) {
-            context.startService(Intent(context, LoggingService::class.java).setAction(ACTION_PAUSE))
-        }
-
-        fun unpause(context: Context) {
-            context.startService(Intent(context, LoggingService::class.java).setAction(ACTION_UNPAUSE))
-        }
+        private fun intent(context: Context, action: String) =
+            Intent(context, LoggingService::class.java).setAction(action)
     }
 }
 
