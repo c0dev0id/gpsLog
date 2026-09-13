@@ -57,6 +57,7 @@ class LoggingService : Service(), FixSink {
     private var running = false
 
     // Handler-thread-only state.
+    private var paused = false
     private var writer: RunWriter? = null
     private var bluetoothSource: BluetoothNmeaSource? = null
     private var debugLog: NmeaDebugLog? = null
@@ -86,6 +87,8 @@ class LoggingService : Service(), FixSink {
                 stopLogging()
                 return START_NOT_STICKY
             }
+            ACTION_PAUSE -> handler.post { setPaused(true) }
+            ACTION_UNPAUSE -> handler.post { setPaused(false) }
             ACTION_START -> beginForegroundAndLog(newRun = true)
             else -> beginForegroundAndLog(newRun = false) // ACTION_RESUME or sticky restart (null)
         }
@@ -134,6 +137,7 @@ class LoggingService : Service(), FixSink {
         fixTimestampsNanos.clear()
         lastUiUpdateMs = 0L
         lastNotifUpdateMs = 0L
+        paused = false
         LoggingStateHolder.set(
             LoggingState(
                 isLogging = true,
@@ -226,6 +230,20 @@ class LoggingService : Service(), FixSink {
                 )
             }
         }
+        if (!enabled) updateNotification(getString(R.string.notif_receiver_off))
+    }
+
+    private fun setPaused(value: Boolean) {
+        paused = value
+        LoggingStateHolder.update { it.copy(isPaused = value) }
+        if (value) {
+            updateNotification(getString(R.string.notif_paused, pointCount))
+        } else {
+            val rate = computeRateHz()
+            updateNotification(
+                getString(R.string.notif_logging, pointCount, String.format(Locale.US, "%.1f", rate))
+            )
+        }
     }
 
     /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
@@ -250,6 +268,7 @@ class LoggingService : Service(), FixSink {
     /** [FixSink] — one recorded fix, from the internal provider or an external NMEA source. */
     override fun onFix(record: GpsRecord) {
         val w = writer ?: return
+        if (paused) return
         w.append(record)
         pointCount += 1
 
@@ -371,6 +390,8 @@ class LoggingService : Service(), FixSink {
         const val ACTION_START = "de.codevoid.gpslog.action.START"
         const val ACTION_STOP = "de.codevoid.gpslog.action.STOP"
         const val ACTION_RESUME = "de.codevoid.gpslog.action.RESUME"
+        const val ACTION_PAUSE = "de.codevoid.gpslog.action.PAUSE"
+        const val ACTION_UNPAUSE = "de.codevoid.gpslog.action.UNPAUSE"
 
         private const val TAG = "LoggingService"
         private const val CHANNEL_ID = "logging"
@@ -396,6 +417,14 @@ class LoggingService : Service(), FixSink {
             context.startForegroundService(
                 Intent(context, LoggingService::class.java).setAction(ACTION_RESUME)
             )
+        }
+
+        fun pause(context: Context) {
+            context.startService(Intent(context, LoggingService::class.java).setAction(ACTION_PAUSE))
+        }
+
+        fun unpause(context: Context) {
+            context.startService(Intent(context, LoggingService::class.java).setAction(ACTION_UNPAUSE))
         }
     }
 }

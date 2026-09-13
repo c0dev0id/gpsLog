@@ -21,6 +21,7 @@ data class LoggingState(
     val gnssRunning: Boolean = false,
     val satellitesVisible: Int = 0,
     val satellitesUsedInFix: Int = 0,
+    val isPaused: Boolean = false,
 ) {
     /** The GNSS engine reports satellites used in its current fix only while it has one. */
     val hasFix: Boolean get() = satellitesUsedInFix > 0

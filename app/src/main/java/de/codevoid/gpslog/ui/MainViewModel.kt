@@ -170,6 +170,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stop() = LoggingService.stop(getApplication())
 
+    fun pause() = LoggingService.pause(getApplication())
+
+    fun unpause() = LoggingService.unpause(getApplication())
+
     fun toggleSelect(id: Long) = _selected.update { if (id in it) it - id else it + id }
 
     /** The active run cannot be deleted or merged while it is being written to. */

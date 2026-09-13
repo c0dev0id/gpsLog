@@ -111,7 +111,7 @@ fun GpsLogScreen(
                 Tab(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    text = { RecordTabLabel(isLogging = state.isLogging) },
+                    text = { RecordTabLabel(isLogging = state.isLogging, isPaused = state.isPaused) },
                 )
                 Tab(
                     selected = tab == 1,
@@ -146,6 +146,8 @@ fun GpsLogScreen(
                     preciseLocation = preciseLocation,
                     onStart = vm::start,
                     onStop = vm::stop,
+                    onPause = vm::pause,
+                    onUnpause = vm::unpause,
                     onOpenSettings = onOpenSettings,
                 )
                 1 -> RunsTab(
@@ -186,7 +188,7 @@ fun GpsLogScreen(
 }
 
 @Composable
-private fun RecordTabLabel(isLogging: Boolean) {
+private fun RecordTabLabel(isLogging: Boolean, isPaused: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -196,7 +198,11 @@ private fun RecordTabLabel(isLogging: Boolean) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .background(MaterialTheme.colorScheme.error, CircleShape)
+                    .background(
+                        if (isPaused) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.error,
+                        CircleShape,
+                    )
             )
         }
     }
@@ -209,6 +215,8 @@ private fun RecordTab(
     preciseLocation: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onPause: () -> Unit,
+    onUnpause: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Column(
@@ -221,11 +229,14 @@ private fun RecordTab(
         if (!preciseLocation) {
             PreciseLocationBanner(onOpenSettings)
         }
-        StartStopButton(
+        RecordingControls(
             isLogging = state.isLogging,
+            isPaused = state.isPaused,
             enabled = preciseLocation || state.isLogging,
             onStart = onStart,
             onStop = onStop,
+            onPause = onPause,
+            onUnpause = onUnpause,
         )
         LiveStats(state)
     }
@@ -667,19 +678,39 @@ private fun PreciseLocationBanner(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun StartStopButton(isLogging: Boolean, enabled: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
-    Button(
-        onClick = { if (isLogging) onStop() else onStart() },
-        enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth(),
-        colors = if (isLogging) {
-            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-        } else {
-            ButtonDefaults.buttonColors()
-        },
-    ) {
-        Text(if (isLogging) "Stop" else "Start", style = MaterialTheme.typography.titleLarge)
+private fun RecordingControls(
+    isLogging: Boolean,
+    isPaused: Boolean,
+    enabled: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onUnpause: () -> Unit,
+) {
+    if (!isLogging) {
+        Button(
+            onClick = onStart,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Start", style = MaterialTheme.typography.titleLarge)
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onStop,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text("Stop", style = MaterialTheme.typography.titleLarge)
+            }
+            OutlinedButton(
+                onClick = if (isPaused) onUnpause else onPause,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (isPaused) "Resume" else "Pause", style = MaterialTheme.typography.titleLarge)
+            }
+        }
     }
 }
 
