@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Pause/Resume button on the Record tab: pausing keeps the GPS/Bluetooth connection alive and satellite status flowing but stops writing points; the timestamp gap produces a new track segment on export automatically. The Record tab dot turns amber while paused (red while actively recording). The notification shows the point count while paused.
+
+### Fixed
+- Notification no longer shows stale point/rate data while a Bluetooth receiver is disconnected; it now immediately updates to "Receiver disconnected — reconnecting…"
+
 ### Changed
 - Recording now holds no wake lock: the foreground-service location type + GPS hardware keeps the relevant subsystems running without pinning the CPU, reducing heat significantly during long runs
 - Write durability relaxed: fdatasync removed from the periodic flush (OS page cache is sufficient; only a power-loss crash risks data loss, which is acceptable) and the flush interval extended from 10 s to 60 s
