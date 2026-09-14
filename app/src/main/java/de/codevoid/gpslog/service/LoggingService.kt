@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
@@ -87,8 +88,9 @@ class LoggingService : Service(), FixSink {
                 stopLogging()
                 return START_NOT_STICKY
             }
-            ACTION_PAUSE -> handler.post { setPaused(true) }
-            ACTION_UNPAUSE -> handler.post { setPaused(false) }
+            // Guarded: these also arrive from the notification, which can outlive a dead run.
+            ACTION_PAUSE -> handler.post { if (running) setPaused(true) }
+            ACTION_UNPAUSE -> handler.post { if (running) setPaused(false) }
             ACTION_START -> beginForegroundAndLog(newRun = true)
             else -> beginForegroundAndLog(newRun = false) // ACTION_RESUME or sticky restart (null)
         }
@@ -438,21 +440,45 @@ class LoggingService : Service(), FixSink {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun buildNotification(text: String): Notification {
+    /** [action] adds the matching Pause or Resume button; null builds the plain notification. */
+    private fun buildNotification(text: String, action: String? = null): Notification {
         val tap = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
-        return Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_stat_logging)
             .setOngoing(true)
             .setContentIntent(tap)
-            .build()
+        if (action != null) {
+            val label = getString(
+                if (action == ACTION_UNPAUSE) R.string.notif_action_resume
+                else R.string.notif_action_pause
+            )
+            // No icon: the standard template does not draw action icons, and there is no
+            // transport-control drawable in the project worth adding for one that is never shown.
+            builder.addAction(
+                Notification.Action.Builder(null as Icon?, label, serviceIntent(action)).build()
+            )
+        }
+        return builder.build()
     }
 
+    /** Distinct request codes so the Pause and Resume intents cannot overwrite each other. */
+    private fun serviceIntent(action: String): PendingIntent = PendingIntent.getService(
+        this,
+        action.hashCode(),
+        intent(this, action),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** Logger thread only — it reads [paused] to decide which action the notification offers. */
     private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            buildNotification(text, if (paused) ACTION_UNPAUSE else ACTION_PAUSE),
+        )
     }
 
     companion object {
@@ -476,7 +502,7 @@ class LoggingService : Service(), FixSink {
         fun pause(context: Context) = context.startService(intent(context, ACTION_PAUSE))
         fun unpause(context: Context) = context.startService(intent(context, ACTION_UNPAUSE))
 
-        private fun intent(context: Context, action: String) =
+        fun intent(context: Context, action: String): Intent =
             Intent(context, LoggingService::class.java).setAction(action)
     }
 }

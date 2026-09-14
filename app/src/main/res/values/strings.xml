@@ -8,4 +8,6 @@
     <string name="notif_paused">Paused · %1$d points</string>
     <string name="notif_paused_blocked">Paused · GPS source unavailable</string>
     <string name="notif_receiver_off">Receiver disconnected — reconnecting…</string>
+    <string name="notif_action_pause">Pause</string>
+    <string name="notif_action_resume">Resume</string>
 </resources>
