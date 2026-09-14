@@ -36,13 +36,18 @@ import java.util.Locale
 import java.util.concurrent.Executor
 
 /**
- * Foreground service that records raw GPS fixes at the chipset rate. Fixes are delivered on a
- * dedicated HandlerThread (never the main Looper); every fix is written to disk while UI state and
- * the notification are updated at a throttled rate. GNSS satellite status is tracked alongside so
- * the UI can show why no points arrive (provider off, no fix) and how many satellites are in view.
- * A partial wake lock keeps writes flowing under Doze. The service exists only for the duration of
- * a run and resumes an interrupted run on system-driven restart (START_STICKY) or reboot
- * (BootReceiver).
+ * Foreground service that records raw GPS fixes at the chipset rate, from either the internal
+ * provider or an external Bluetooth NMEA receiver. Fixes are delivered on a dedicated HandlerThread
+ * (never the main Looper); each one is appended to the writer's in-memory buffer and flushed on a
+ * fixed cadence, while UI state and the notification are updated at a throttled rate. GNSS satellite
+ * status is tracked alongside so the UI can show why no points arrive (provider off, no fix) and how
+ * many satellites are in view. No wake lock is held — the foreground-service location type keeps the
+ * relevant subsystems running without pinning the CPU for the length of a run.
+ *
+ * The service exists only for the duration of a run and resumes an interrupted one on system-driven
+ * restart (START_STICKY) or reboot (BootReceiver). Pausing releases the fix source entirely rather
+ * than merely dropping fixes, and the paused state is persisted, so a paused run survives a restart
+ * without drawing power.
  */
 class LoggingService : Service(), FixSink {
 
