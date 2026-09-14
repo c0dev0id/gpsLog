@@ -726,19 +726,32 @@ private fun LiveStats(state: LoggingState) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Stat("Started", state.startTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
+            // Pausing releases the receiver, so gnssRunning goes false — say "Paused", not
+            // "Receiver off", and drop the good/bad colouring that no longer means anything.
             Stat(
                 "GPS",
                 if (!logging) "—" else when {
+                    state.isPaused -> "Paused"
                     !state.gpsEnabled -> "Disabled"
                     !state.gnssRunning -> "Receiver off"
                     state.hasFix -> "Fix"
                     else -> "Searching"
                 },
-                highlight = if (logging) state.gpsEnabled && state.hasFix else null,
+                highlight = if (logging && !state.isPaused) state.gpsEnabled && state.hasFix else null,
             )
-            Stat("Satellites", if (logging) "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible" else "—")
+            Stat(
+                "Satellites",
+                if (logging && !state.isPaused) {
+                    "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible"
+                } else {
+                    "—"
+                },
+            )
             Stat("Points", if (logging) state.pointCount.toString() else "—")
-            Stat("Rate", if (logging) String.format(Locale.US, "%.1f Hz", state.updateRateHz) else "—")
+            Stat(
+                "Rate",
+                if (logging && !state.isPaused) String.format(Locale.US, "%.1f Hz", state.updateRateHz) else "—",
+            )
             Stat("GPS time", state.lastFixTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
             Stat("Speed", state.speedMetersPerSecond?.let { String.format(Locale.US, "%.1f m/s", it) } ?: "—")
             Stat("Accuracy", state.accuracyMeters?.let { String.format(Locale.US, "%.1f m", it) } ?: "—")
