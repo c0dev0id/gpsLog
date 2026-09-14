@@ -116,6 +116,42 @@ class LoggingService : Service(), FixSink {
     }
 
     private fun startLogging(id: Long) {
+        val file = runs.runFile(id)
+        runId = id
+        pointCount = RunReader.pointCount(file)
+        startTimeMillis = RunReader.firstRecord(file)?.timeMillis ?: id
+        fixTimestampsNanos.clear()
+        lastUiUpdateMs = 0L
+        lastNotifUpdateMs = 0L
+        paused = false
+        // Acquired before the writer exists so a refusal leaves no empty run file behind.
+        if (!startSource()) {
+            stopLoggingInternal(clearActive = true)
+            return
+        }
+        writer = RunWriter(file)
+        LoggingStateHolder.set(
+            LoggingState(
+                isLogging = true,
+                runId = id,
+                startTimeMillis = startTimeMillis,
+                pointCount = pointCount,
+                // External "enabled" flips true once the first sentence arrives.
+                gpsEnabled = isInternalSource() &&
+                    locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+            )
+        )
+        handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+    }
+
+    private fun isInternalSource(): Boolean = settings.recordingSource.value.isEmpty()
+
+    /**
+     * Acquires the configured fix source. Returns false when it cannot be started (permission
+     * refused, Bluetooth off), having registered nothing. Logger thread only: it reads [runId] and
+     * assigns [bluetoothSource] / [debugLog].
+     */
+    private fun startSource(): Boolean {
         val source = settings.recordingSource.value
         val internal = source.isEmpty()
         // Internal: coarse-only access does not throw but GPS_PROVIDER is silently fuzzed and
@@ -126,30 +162,10 @@ class LoggingService : Service(), FixSink {
             else Manifest.permission.BLUETOOTH_CONNECT
         if (checkSelfPermission(required) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "$required not granted; refusing to log")
-            stopLoggingInternal(clearActive = true)
-            return
+            return false
         }
-        val file = runs.runFile(id)
-        runId = id
-        pointCount = RunReader.pointCount(file)
-        startTimeMillis = RunReader.firstRecord(file)?.timeMillis ?: id
-        writer = RunWriter(file)
-        fixTimestampsNanos.clear()
-        lastUiUpdateMs = 0L
-        lastNotifUpdateMs = 0L
-        paused = false
-        LoggingStateHolder.set(
-            LoggingState(
-                isLogging = true,
-                runId = id,
-                startTimeMillis = startTimeMillis,
-                pointCount = pointCount,
-                // External "enabled" flips true once the first sentence arrives.
-                gpsEnabled = internal && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
-            )
-        )
         val debugFile = if (settings.debugLogging.value) {
-            File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$id.log")
+            File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$runId.log")
         } else {
             null
         }
@@ -162,8 +178,7 @@ class LoggingService : Service(), FixSink {
                     Log.w(TAG, "GnssStatus callback not registered; satellite info unavailable")
                 }
             } catch (e: SecurityException) {
-                stopLoggingInternal(clearActive = true)
-                return
+                return false
             }
             // Debug: dump the chipset's identity/capabilities and tee its NMEA, at the fix rate the
             // HAL emits — the only app-level probe of the internal receiver's real rate/constellations.
@@ -180,13 +195,27 @@ class LoggingService : Service(), FixSink {
             val adapter = getSystemService(BluetoothManager::class.java)?.adapter
             if (adapter == null || !adapter.isEnabled) {
                 Log.w(TAG, "Bluetooth unavailable or disabled; refusing to log")
-                stopLoggingInternal(clearActive = true)
-                return
+                return false
             }
             bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler, debugFile)
                 .also { it.start() }
         }
-        handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+        return true
+    }
+
+    /** Releases the fix source and its debug log. Safe to call when nothing is acquired. */
+    private fun stopSource() {
+        bluetoothSource?.stop()
+        bluetoothSource = null
+        try {
+            locationManager.removeUpdates(listener)
+            locationManager.unregisterGnssStatusCallback(gnssCallback)
+            locationManager.removeNmeaListener(nmeaListener)
+        } catch (_: Exception) {
+        }
+        debugLog?.note("session end")
+        debugLog?.close()
+        debugLog = null
     }
 
     private val listener = object : LocationListener {
@@ -321,17 +350,7 @@ class LoggingService : Service(), FixSink {
 
     private fun stopLoggingInternal(clearActive: Boolean) {
         handler.removeCallbacks(flushRunnable)
-        bluetoothSource?.stop()
-        bluetoothSource = null
-        try {
-            locationManager.removeUpdates(listener)
-            locationManager.unregisterGnssStatusCallback(gnssCallback)
-            locationManager.removeNmeaListener(nmeaListener)
-        } catch (_: Exception) {
-        }
-        debugLog?.note("session end")
-        debugLog?.close()
-        debugLog = null
+        stopSource()
         writer?.close()
         writer = null
         running = false
@@ -345,17 +364,7 @@ class LoggingService : Service(), FixSink {
 
     override fun onDestroy() {
         handler.removeCallbacks(flushRunnable)
-        bluetoothSource?.stop()
-        bluetoothSource = null
-        try {
-            locationManager.removeUpdates(listener)
-            locationManager.unregisterGnssStatusCallback(gnssCallback)
-            locationManager.removeNmeaListener(nmeaListener)
-        } catch (_: Exception) {
-        }
-        debugLog?.note("session end")
-        debugLog?.close()
-        debugLog = null
+        stopSource()
         writer?.close()
         writer = null
         handlerThread.quitSafely()
