@@ -123,9 +123,11 @@ class LoggingService : Service(), FixSink {
         fixTimestampsNanos.clear()
         lastUiUpdateMs = 0L
         lastNotifUpdateMs = 0L
-        paused = false
+        // A run paused before a reboot or a process kill comes back paused: nothing is acquired
+        // and nothing is recorded until the user resumes.
+        paused = settings.isPaused()
         // Acquired before the writer exists so a refusal leaves no empty run file behind.
-        if (!startSource()) {
+        if (!paused && !startSource()) {
             stopLoggingInternal(clearActive = true)
             return
         }
@@ -136,12 +138,17 @@ class LoggingService : Service(), FixSink {
                 runId = id,
                 startTimeMillis = startTimeMillis,
                 pointCount = pointCount,
+                isPaused = paused,
                 // External "enabled" flips true once the first sentence arrives.
                 gpsEnabled = isInternalSource() &&
                     locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
             )
         )
-        handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+        if (paused) {
+            updateNotification(getString(R.string.notif_paused, pointCount))
+        } else {
+            handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+        }
     }
 
     private fun isInternalSource(): Boolean = settings.recordingSource.value.isEmpty()
@@ -247,6 +254,7 @@ class LoggingService : Service(), FixSink {
 
     /** [FixSink] — receiver/provider on/off; off also drops the (now meaningless) satellite state. */
     override fun onSourceEnabled(enabled: Boolean) {
+        if (paused) return
         LoggingStateHolder.update {
             if (enabled) {
                 it.copy(gpsEnabled = true)
@@ -262,16 +270,67 @@ class LoggingService : Service(), FixSink {
         if (!enabled) updateNotification(getString(R.string.notif_receiver_off))
     }
 
+    /**
+     * Pause releases the fix source outright rather than just dropping fixes, so the GPS chipset
+     * (or the Bluetooth link) powers down and a paused run costs no battery. The flag is persisted,
+     * so a reboot or a process kill brings the run back paused. Resuming re-acquires the source; a
+     * GPS warm start is quick because the ephemeris is still cached.
+     */
     private fun setPaused(value: Boolean) {
-        paused = value
-        // Stamp the throttle clock so onSatelliteStatus cannot overwrite this notification for 2 s.
+        if (paused == value) return
+        if (value) {
+            paused = true
+            settings.setPaused(true)
+            handler.removeCallbacks(flushRunnable)
+            stopSource()
+            writer?.flush()
+            fixTimestampsNanos.clear()
+            LoggingStateHolder.update {
+                it.copy(
+                    isPaused = true,
+                    gnssRunning = false,
+                    satellitesVisible = 0,
+                    satellitesUsedInFix = 0,
+                    updateRateHz = 0f,
+                    speedMetersPerSecond = null,
+                    accuracyMeters = null,
+                )
+            }
+            updateNotificationNow(getString(R.string.notif_paused, pointCount))
+        } else {
+            paused = false
+            if (!startSource()) {
+                // Stay paused rather than discard a run the user still owns; the notification
+                // names the problem and Resume can be tapped again once it is fixed.
+                paused = true
+                stopSource()
+                updateNotificationNow(getString(R.string.notif_paused_blocked))
+                return
+            }
+            settings.setPaused(false)
+            fixTimestampsNanos.clear()
+            LoggingStateHolder.update {
+                it.copy(
+                    isPaused = false,
+                    // Re-read rather than trust the pre-pause value: registering a listener does
+                    // not report the provider's current state, and onProviderDisabled only fires
+                    // on a change, so the provider may have been switched off while we were down.
+                    gpsEnabled = isInternalSource() &&
+                        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+                )
+            }
+            updateNotificationNow(loggingNotifText())
+            handler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * Notification update that also stamps the throttle clock, so a fix or satellite-status update
+     * cannot overwrite it for the next throttle window.
+     */
+    private fun updateNotificationNow(text: String) {
         lastNotifUpdateMs = SystemClock.elapsedRealtime()
-        if (!value) fixTimestampsNanos.clear()
-        LoggingStateHolder.update { it.copy(isPaused = value) }
-        updateNotification(
-            if (value) getString(R.string.notif_paused, pointCount)
-            else loggingNotifText()
-        )
+        updateNotification(text)
     }
 
     private fun loggingNotifText(rate: Float = computeRateHz()): String =
@@ -279,6 +338,7 @@ class LoggingService : Service(), FixSink {
 
     /** [FixSink] — ~1 Hz from the GNSS engine (or NMEA GGA/GSV); drives the no-fix notification. */
     override fun onSatelliteStatus(visible: Int, usedInFix: Int) {
+        if (paused) return
         LoggingStateHolder.update { state ->
             if (LoggingStateHolder.uiVisible) {
                 state.copy(gnssRunning = true, satellitesVisible = visible, satellitesUsedInFix = usedInFix)

@@ -66,12 +66,25 @@ class SettingsStore(context: Context) {
     /** Run id currently being logged, or null when no run is active. */
     fun activeRunId(): Long? = prefs.getLong(KEY_ACTIVE_RUN, NO_RUN).takeIf { it != NO_RUN }
 
+    /** A newly started run is never paused, so this clears any flag a killed run left behind. */
     fun setActiveRun(id: Long) {
-        prefs.edit().putLong(KEY_ACTIVE_RUN, id).apply()
+        prefs.edit().putLong(KEY_ACTIVE_RUN, id).putBoolean(KEY_PAUSED, false).apply()
     }
 
     fun clearActiveRun() {
-        prefs.edit().remove(KEY_ACTIVE_RUN).apply()
+        prefs.edit().remove(KEY_ACTIVE_RUN).remove(KEY_PAUSED).apply()
+    }
+
+    /**
+     * Whether the active run is paused. Persisted alongside the run id so a reboot or a process
+     * kill resumes into the paused state instead of silently recording again. Written and read
+     * only by the service on its logger thread, so a plain getter/setter is enough — the UI takes
+     * the paused flag from `LoggingState`.
+     */
+    fun isPaused(): Boolean = prefs.getBoolean(KEY_PAUSED, false)
+
+    fun setPaused(paused: Boolean) {
+        prefs.edit().putBoolean(KEY_PAUSED, paused).apply()
     }
 
     private companion object {
@@ -82,6 +95,7 @@ class SettingsStore(context: Context) {
         const val KEY_SOURCE = "recording_source_mac"
         const val KEY_DEBUG = "debug_logging"
         const val KEY_ACTIVE_RUN = "active_run_id"
+        const val KEY_PAUSED = "active_run_paused"
         const val NO_RUN = -1L
     }
 }

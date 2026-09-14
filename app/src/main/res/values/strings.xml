@@ -6,5 +6,6 @@
     <string name="notif_logging">%1$d points · %2$s Hz</string>
     <string name="notif_no_fix">Waiting for GPS fix · %1$d satellites</string>
     <string name="notif_paused">Paused · %1$d points</string>
+    <string name="notif_paused_blocked">Paused · GPS source unavailable</string>
     <string name="notif_receiver_off">Receiver disconnected — reconnecting…</string>
 </resources>
