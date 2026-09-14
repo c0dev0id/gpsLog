@@ -55,6 +55,14 @@ class BluetoothNmeaSource(
     private var reconnectSignal: CountDownLatch? = null
 
     /**
+     * Tracked separately from [running], which the reader thread clears on its own when the
+     * permission is revoked — a stop() gated on `running` would then skip the unregister and leak
+     * the receiver past the service.
+     */
+    @Volatile
+    private var receiverRegistered = false
+
+    /**
      * Android broadcasts ACL_CONNECTED when the paired receiver re-establishes a link — a free,
      * event-driven signal that it is back in range, with nothing polled and nothing held awake.
      * It only shortcuts the backoff: the reader thread still owns the reconnect, so a receiver that
@@ -76,13 +84,17 @@ class BluetoothNmeaSource(
             IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED),
             Context.RECEIVER_NOT_EXPORTED,
         )
+        receiverRegistered = true
         thread = Thread(::runLoop, "gps-bt-reader").also { it.start() }
     }
 
+    /** Idempotent, and safe to call after the reader thread has already given up on its own. */
     fun stop() {
-        if (!running) return
         running = false
-        runCatching { appContext.unregisterReceiver(aclReceiver) }
+        if (receiverRegistered) {
+            receiverRegistered = false
+            runCatching { appContext.unregisterReceiver(aclReceiver) }
+        }
         closeSocket()
         reconnectSignal?.countDown()
         thread?.interrupt()
