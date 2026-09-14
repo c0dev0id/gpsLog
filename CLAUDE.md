@@ -107,8 +107,11 @@ HandlerThread** — that is what keeps the writer and its counters single-thread
 - *External*: `service/BluetoothNmeaSource` opens an RFCOMM socket on the SPP
   UUID and reads it on its **own** `gps-bt-reader` thread — a blocking socket
   read must never sit on `gps-logger` and starve the flush and notification
-  callbacks — then `handler.post`s each parsed fix back. Auto-reconnects after
-  3 s on a dropped link and reports the receiver off in between; satellite-status
+  callbacks — then `handler.post`s each parsed fix back. Reconnects on a dropped
+  link with exponential backoff (3 s→60 s, reset on connect), reporting the
+  receiver off in between; `ACTION_ACL_CONNECTED` on the paired address cuts the
+  wait short when the device is really back, as a fast path only — not every
+  receiver re-initiates a link, so the backoff is the mechanism. Satellite-status
   posts are time-gated to 2 s. Needs `BLUETOOTH_CONNECT`, requested lazily from
   the Settings picker so an internal-only user is never prompted. Only bonded
   devices are read — no discovery, no `BLUETOOTH_SCAN`, and no filtering for
@@ -132,7 +135,7 @@ even while no `Location` arrives and needs no staleness timer.
 |---|---|
 | `ACTION_START` | New run: `id = System.currentTimeMillis()`, persisted as the active run in `SettingsStore` |
 | `ACTION_RESUME` / null intent (sticky restart) | Re-open the persisted active run in append mode; if none, `stopSelf()` |
-| `ACTION_PAUSE` / `ACTION_UNPAUSE` | Keep the source connected and satellite status flowing, but stop appending points |
+| `ACTION_PAUSE` / `ACTION_UNPAUSE` | Release / re-acquire the fix source (see **Pause is cold** below); also sent by the notification actions |
 | `ACTION_STOP` | Flush, clear the active-run marker, `stopForeground` + `stopSelf` |
 
 `service/BootReceiver` sends `ACTION_RESUME` after `BOOT_COMPLETED` if an
@@ -149,6 +152,15 @@ every 2 s each. UI updates are skipped **entirely** while
 so background recording costs no allocations and no recompositions; the
 notification update is unconditional. A 60 s `flushRunnable` writes the buffer
 to the page cache.
+
+**Pause is cold.** `setPaused` releases the fix source through `stopSource()`,
+flushes the writer and cancels the flush timer, so the chipset (or the Bluetooth
+link) powers down and a paused run costs no battery; Resume re-acquires it. The
+flag is persisted next to the active run id, so a reboot or a sticky restart
+comes back paused with nothing acquired — do not reintroduce a hardcoded
+`paused = false` in `startLogging`. If the source cannot be re-acquired on
+Resume the run stays paused rather than being discarded. Because the live stats
+go quiet while paused, the notification carries the Pause/Resume action.
 
 **No wake lock and no `fdatasync`** — both were deliberately removed. The
 foreground-service `location` type plus the GPS hardware keep the subsystem
@@ -195,7 +207,8 @@ BluetoothNmea ───┘            │
 - `LoggingState` does not survive process death. "Is a run active" is
   authoritative in `SettingsStore` (`SharedPreferences`), not in the holder.
 - `SettingsStore` owns the three export filters, the recording source and the
-  debug-logging toggle, each as a `StateFlow`, plus the active-run marker.
+  debug-logging toggle, each as a `StateFlow`, plus the active-run marker and its
+  paused flag (plain getter/setter — the UI reads paused from `LoggingState`).
 - The run list is rebuilt from disk on `onResume`, after delete/merge, and
   reactively whenever `loggingState.runId` flips. Selection is ephemeral
   ViewModel state.
