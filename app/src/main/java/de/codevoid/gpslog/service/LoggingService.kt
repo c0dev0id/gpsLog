@@ -206,8 +206,14 @@ class LoggingService : Service(), FixSink {
                 Log.w(TAG, "Bluetooth unavailable or disabled; refusing to log")
                 return false
             }
-            bluetoothSource = BluetoothNmeaSource(adapter, source, this, handler, debugFile)
-                .also { it.start() }
+            bluetoothSource = BluetoothNmeaSource(
+                context = this,
+                adapter = adapter,
+                deviceAddress = source,
+                sink = this,
+                deliver = handler,
+                debugFile = debugFile,
+            ).also { it.start() }
         }
         return true
     }
