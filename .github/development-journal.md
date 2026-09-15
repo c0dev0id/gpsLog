@@ -3,7 +3,7 @@
 ## Software Stack
 
 - **Language:** Kotlin
-- **UI:** Jetpack Compose (Material3), Compose BOM 2026.02.01
+- **UI:** Jetpack Compose (Material3), Compose BOM 2026.09.00
 - **Min SDK:** 34 (Android 14)
 - **Target/Compile SDK:** 36
 - **Location:** platform `LocationManager` + `GPS_PROVIDER` (no Play Services / FusedLocationProvider); optional external classic-Bluetooth GNSS receiver over SPP/NMEA
