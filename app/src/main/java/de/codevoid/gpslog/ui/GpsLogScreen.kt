@@ -25,6 +25,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,12 +55,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,7 +86,16 @@ import kotlin.math.roundToInt
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
 
-@OptIn(ExperimentalMaterial3Api::class)
+private const val TAB_RECORD = 0
+private const val TAB_RUNS = 1
+private const val TAB_EXPORT = 2
+private const val TAB_SETTINGS = 3
+
+/**
+ * The one screen: four top-level surfaces behind a bottom navigation bar. The shell collects only
+ * what the bar needs (the active run and the selection size); every surface collects its own flows,
+ * so a logging-state tick recomposes the Record surface alone.
+ */
 @Composable
 fun GpsLogScreen(
     vm: MainViewModel,
@@ -82,134 +104,127 @@ fun GpsLogScreen(
     onOpenSettings: () -> Unit,
     onInstall: (File) -> Unit,
 ) {
-    val state by vm.loggingState.collectAsStateWithLifecycle()
-    val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
-    val runs by vm.runs.collectAsStateWithLifecycle()
+    val active by vm.activeRun.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
-    val filters by vm.filters.collectAsStateWithLifecycle()
-    val updateState by vm.update.collectAsStateWithLifecycle()
-    val exportPreview by vm.exportPreview.collectAsStateWithLifecycle()
-    val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
-    val debugLogging by vm.debugLogging.collectAsStateWithLifecycle()
+    var tab by rememberSaveable { mutableIntStateOf(TAB_RECORD) }
 
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-
-    // The Export tab is only reachable with a selection; leaving it empty falls back to Runs.
+    // Export is only reachable with a selection; a restored index lands on Runs when it is empty.
     LaunchedEffect(selected.isEmpty()) {
-        if (selected.isEmpty() && tab == 2) tab = 1
+        if (selected.isEmpty() && tab == TAB_EXPORT) tab = TAB_RUNS
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("gpsLog") }) }
+        bottomBar = {
+            GpsLogNavBar(
+                tab = tab,
+                onTab = { tab = it },
+                recording = active != null,
+                paused = active?.paused == true,
+                exportCount = selected.size,
+            )
+        },
     ) { padding ->
-        Column(
+        // Consuming the padded insets lets a surface's imePadding() measure from the bar, not the
+        // window edge, so a pinned button row lands on the keyboard instead of a bar's height above it.
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .consumeWindowInsets(padding),
         ) {
-            PrimaryTabRow(selectedTabIndex = tab) {
-                Tab(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    text = { RecordTabLabel(isLogging = state.isLogging, isPaused = state.isPaused) },
-                )
-                Tab(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    text = { Text("Runs") },
-                )
-                Tab(
-                    selected = tab == 2,
-                    enabled = selected.isNotEmpty(),
-                    onClick = { tab = 2 },
-                    text = {
-                        Text(
-                            if (selected.isEmpty()) "Export" else "Export (${selected.size})",
-                            color = if (selected.isEmpty()) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            } else {
-                                Color.Unspecified
-                            },
-                        )
-                    },
-                )
-                Tab(
-                    selected = tab == 3,
-                    onClick = { tab = 3 },
-                    text = { Text("Settings") },
-                )
-            }
             when (tab) {
-                0 -> RecordTab(
-                    modifier = Modifier.weight(1f),
-                    state = state,
-                    preciseLocation = preciseLocation,
-                    onStart = vm::start,
-                    onStop = vm::stop,
-                    onPause = vm::pause,
-                    onUnpause = vm::unpause,
-                    onOpenSettings = onOpenSettings,
-                )
-                1 -> RunsTab(
-                    modifier = Modifier.weight(1f),
-                    runs = runs,
-                    selected = selected,
-                    activeRunId = if (state.isLogging) state.runId else null,
-                    onToggleSelect = vm::toggleSelect,
-                    onDeleteSelected = vm::deleteSelected,
-                    onMergeSelected = vm::mergeSelected,
-                )
-                2 -> ExportTab(
-                    modifier = Modifier.weight(1f),
-                    selectedRuns = selected.size,
-                    selectedPoints = runs.filter { it.id in selected }.sumOf { it.pointCount },
-                    filters = filters,
-                    preview = exportPreview,
-                    onAccuracy = vm::setAccuracyMeters,
-                    onDistance = vm::setDistanceMeters,
-                    onTime = vm::setTimeSeconds,
-                    onShare = onShare,
-                )
-                else -> SettingsTab(
-                    modifier = Modifier.weight(1f),
-                    recordingSource = recordingSource,
-                    onSelectSource = vm::setRecordingSource,
-                    debugLogging = debugLogging,
-                    onSetDebugLogging = vm::setDebugLogging,
-                    onShareDebugLog = onShareDebugLog,
-                    installedVersion = vm.installedVersion,
-                    updateState = updateState,
-                    onCheckUpdate = vm::checkForUpdate,
-                    onDownloadInstall = { vm.downloadAndInstall(onInstall) },
-                )
+                TAB_RECORD -> RecordSurface(vm = vm, onOpenSettings = onOpenSettings)
+                TAB_RUNS -> RunsSurface(vm = vm, onGoToRecord = { tab = TAB_RECORD })
+                TAB_EXPORT -> ExportSurface(vm = vm, onShare = onShare)
+                else -> SettingsSurface(vm = vm, onShareDebugLog = onShareDebugLog, onInstall = onInstall)
             }
         }
     }
 }
 
+/**
+ * Stock navigation bar. The recording state rides on the Record item as a dot badge (error while
+ * recording, tertiary while paused) and the selection count on the Export item as a number badge;
+ * Export is disabled while nothing is selected.
+ */
 @Composable
-private fun RecordTabLabel(isLogging: Boolean, isPaused: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text("Record")
-        if (isLogging) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        if (isPaused) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.error,
-                        CircleShape,
+private fun GpsLogNavBar(
+    tab: Int,
+    onTab: (Int) -> Unit,
+    recording: Boolean,
+    paused: Boolean,
+    exportCount: Int,
+) {
+    NavigationBar {
+        NavigationBarItem(
+            selected = tab == TAB_RECORD,
+            onClick = { onTab(TAB_RECORD) },
+            icon = {
+                val description = when {
+                    !recording -> "Record"
+                    paused -> "Record, paused"
+                    else -> "Record, recording"
+                }
+                BadgedBox(
+                    badge = {
+                        if (recording) {
+                            Badge(
+                                containerColor = if (paused) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
+                        }
+                    },
+                    modifier = Modifier.semantics { contentDescription = description },
+                ) {
+                    Icon(
+                        if (tab == TAB_RECORD) Icons.Filled.LocationOn else Icons.Outlined.LocationOn,
+                        contentDescription = null,
                     )
-            )
-        }
+                }
+            },
+            label = { Text("Record", maxLines = 1) },
+        )
+        NavigationBarItem(
+            selected = tab == TAB_RUNS,
+            onClick = { onTab(TAB_RUNS) },
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+            label = { Text("Runs", maxLines = 1) },
+        )
+        NavigationBarItem(
+            selected = tab == TAB_EXPORT,
+            onClick = { onTab(TAB_EXPORT) },
+            enabled = exportCount > 0,
+            icon = {
+                BadgedBox(
+                    badge = { if (exportCount > 0) Badge { Text("$exportCount") } },
+                ) {
+                    Icon(
+                        if (tab == TAB_EXPORT) Icons.Filled.Share else Icons.Outlined.Share,
+                        contentDescription = null,
+                    )
+                }
+            },
+            label = { Text("Export", maxLines = 1) },
+        )
+        NavigationBarItem(
+            selected = tab == TAB_SETTINGS,
+            onClick = { onTab(TAB_SETTINGS) },
+            icon = {
+                Icon(
+                    if (tab == TAB_SETTINGS) Icons.Filled.Settings else Icons.Outlined.Settings,
+                    contentDescription = null,
+                )
+            },
+            label = { Text("Settings", maxLines = 1) },
+        )
     }
 }
 
 @Composable
-private fun RecordTab(
+internal fun RecordTab(
     modifier: Modifier,
     state: LoggingState,
     preciseLocation: Boolean,
@@ -244,7 +259,7 @@ private fun RecordTab(
 
 /** Recording-source picker plus the in-app nightly updater; home for future preferences. */
 @Composable
-private fun SettingsTab(
+internal fun SettingsTab(
     modifier: Modifier,
     recordingSource: String,
     onSelectSource: (String) -> Unit,
@@ -483,7 +498,7 @@ private fun DebugSection(
 }
 
 @Composable
-private fun RunsTab(
+internal fun RunsTab(
     modifier: Modifier,
     runs: List<RunInfo>,
     selected: Set<Long>,
@@ -559,7 +574,7 @@ private fun RunsTab(
  * the system share sheet (saving to disk is just sharing to a file manager).
  */
 @Composable
-private fun ExportTab(
+internal fun ExportTab(
     modifier: Modifier,
     selectedRuns: Int,
     selectedPoints: Long,
