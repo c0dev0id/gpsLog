@@ -8,13 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Delete asks for confirmation before removing runs; Merge, which loses nothing, does not
+- The Accuracy tile on Record is highlighted when the live fix is worse than the export accuracy filter, so a fix that would be dropped at export is visible while recording
+- "Share latest log" on Settings shows when the log was captured and is disabled with a note while no log exists
+- A Clear action in the Runs header drops a multi-row selection at once
 - Pause/Resume, on the Record tab and as a notification action: pausing releases the GPS receiver (or the Bluetooth link) outright, so a paused run draws no battery rather than nearly as much as a recording one, and it stays paused across a reboot or a process kill. Resuming re-acquires the receiver, which is quick because the GPS ephemeris is still cached. The timestamp gap produces a new track segment on export automatically. The Record tab dot turns amber while paused (red while actively recording), the live stats read "Paused", and the notification shows the point count.
 
 ### Fixed
+- A connecting or reconnecting Bluetooth receiver is reported as "Receiver off" on the Record screen instead of "GPS disabled"
+- Sharing the debug log while none existed silently did nothing; the row is now disabled until a log has been captured
 - Notification no longer shows stale point/rate data while a Bluetooth receiver is disconnected; it now immediately updates to "Receiver disconnected — reconnecting…"
 - A run paused before a reboot or a process kill no longer comes back recording — it comes back paused, with the receiver still released
 
 ### Changed
+- Redesigned the screen around a bottom navigation bar: Record, Runs, Export and Settings are destinations with icons; the Record item carries a recording dot (red while recording, amber while paused), the Export item carries the selection count as a badge and is disabled while nothing is selected; the app bar title is gone and every surface starts with its own header
+- Record leads with the GPS state as a headline word (Ready, Searching, Fix, Paused, Receiver off, GPS disabled, Unavailable) with the start time and the recorded span underneath, and shows the live values as a grid of tiles with tabular numerals so they no longer jitter; Stop and Pause/Resume are large side-by-side buttons
+- Runs are two-line list rows with the date and time, duration and point count, tinted when selected, with a "Recording"/"Paused" tag on the active run; the header shows a summary of all runs or the selection count
+- Export filters are rows that say what they do, with the unit inside the field; an invalid entry is flagged with the valid range and snaps back to the value in effect when the field loses focus; the Time filter says it is ignored while a distance is set instead of being disabled; the result keeps the last figures dimmed while recomputing instead of showing "Calculating…", and names the fix when every point is filtered out; the Export button stays above the keyboard
+- The GPS device is chosen from an inline list on Settings instead of a dropdown field, and settings are grouped under Recording, Diagnostics and About
+- Dark mode no longer flashes a light frame at launch
 - Recording now holds no wake lock: the foreground-service location type + GPS hardware keeps the relevant subsystems running without pinning the CPU, reducing heat significantly during long runs
 - Write durability relaxed: fdatasync removed from the periodic flush (OS page cache is sufficient; only a power-loss crash risks data loss, which is acceptable) and the flush interval extended from 10 s to 60 s
 - All status updates (UI state and notification) throttled to 2 s; UI state updates are skipped entirely when the app is in background — no allocations or Compose recompositions during background recording

@@ -39,9 +39,11 @@ Gradle tasks the workflows run (reference only):
 | Signed release APK | `./gradlew assembleRelease -PversionName=… [-PversionCode=…]` |
 
 Unit tests (`app/src/test`, JUnit 4) cover `RunCodec`, `PointFilter` and
-`NmeaParser` — the three Android-free modules with the highest on-paper risk.
-Keep them and anything else you want tested free of Android classes; there is no
-emulator and no instrumentation test setup.
+`NmeaParser` — the three Android-free modules with the highest on-paper risk —
+plus the UI's pure helpers `ui/Format.kt` (`Formats`, `formatDuration`,
+`reductionPercent`, the filter parsers) and `ui/RecordStatus.kt`. Keep them and
+anything else you want tested free of Android classes; there is no emulator and
+no instrumentation test setup.
 
 | Workflow | Trigger | Outcome |
 |---|---|---|
@@ -209,9 +211,12 @@ BluetoothNmea ───┘            │
 - `SettingsStore` owns the three export filters, the recording source and the
   debug-logging toggle, each as a `StateFlow`, plus the active-run marker and its
   paused flag (plain getter/setter — the UI reads paused from `LoggingState`).
-- The run list is rebuilt from disk on `onResume`, after delete/merge, and
-  reactively whenever `loggingState.runId` flips. Selection is ephemeral
-  ViewModel state.
+- The run list (and `latestDebugLog`, the newest captured NMEA log) is rebuilt
+  from disk on `onResume`, after delete/merge, and reactively whenever
+  `loggingState.runId` flips. Selection is ephemeral ViewModel state.
+- `MainViewModel.activeRun` reduces `LoggingState` to `ActiveRun(id, paused)?`
+  for the shell and the Runs list, so point ticks recompose only the Record
+  surface.
 - `MainActivity` owns everything that needs an Activity: the up-front permission
   chain (location → background location → battery-optimization exemption), the
   `uiVisible` flag, and the `FileProvider`-backed share and install intents over
@@ -219,23 +224,63 @@ BluetoothNmea ───┘            │
 
 ### UI
 
-One screen, four tabs (`PrimaryTabRow` + a `rememberSaveable` index — no
-`navigation-compose`), so each surface owns its own scroll:
+One screen, four top-level surfaces behind a Material 3 `NavigationBar` (a
+`rememberSaveable` index and a `when` — no `navigation-compose`). There is no
+app bar: Runs, Export and Settings open with a `SurfaceHeader`, Record's status
+hero is its header. The shell (`ui/GpsLogScreen.kt`) collects only `activeRun`
+and `selected`; each surface lives in its own file and collects its own flows,
+so a 2 s `LoggingState` tick recomposes `RecordSurface` alone.
 
-- **Record** — start/stop/pause, the precise-location banner, live stats (the
-  panel stays mounted when idle, showing `—`, so the layout does not jump). The
-  tab label carries a recording dot, amber while paused.
-- **Runs** — the list, with a leading checkbox for multiselect; Delete and Merge
-  are buttons below it acting on the whole selection. The active run may be
-  selected for export but is excluded from Delete/Merge.
-- **Export** — enabled only when the selection is non-empty (label shows the
-  count). A `LaunchedEffect` falls back to Runs if the saved tab index restores
-  to Export with an empty selection.
-- **Settings** — recording-source picker, the updater, the debug-NMEA toggle
-  and share button.
+- **Record** (`RecordSurface.kt`) — a status word from `recordStatus()` with a
+  subtitle from `recordSubtitle()`; the recorded span is `lastFix − start`, so
+  it advances with fixes and freezes while paused (no ticking clock). 56 dp
+  text-only controls: Stop on the left in `errorContainer`, Pause/Resume on the
+  right, one filled-primary button at a time. Six tabular-numeral tiles in one
+  `Panel` stay mounted while idle showing `—`; the Accuracy tile flags a fix
+  worse than the export accuracy filter. `recordStatus` maps a false
+  `gpsEnabled` to *Receiver off* for an external source (the service
+  initialises it internal-only and drops it on a Bluetooth disconnect) and to
+  *GPS disabled* for the internal one.
+- **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows (`toggleable`
+  whole row, leading `Checkbox`, `secondaryContainer` when selected, a
+  dot-and-word tag on the active run), a header summary or `n selected · Clear`,
+  and an `ActionTray` with Delete (confirmed by an `AlertDialog` — the one
+  irreversible action) and Merge (no dialog). The active run may be selected for
+  export but is excluded from both.
+- **Export** (`ExportSurface.kt`) — the navigation item is `enabled` only with a
+  selection and carries the count as a `Badge`; a `LaunchedEffect` falls back to
+  Runs if the saved index restores to Export with an empty selection. Filters
+  are `FilterRow`s (meaning left, 120 dp field with a `suffix` unit right): the
+  pure parsers commit valid input immediately, invalid input flags the field and
+  snaps back on focus loss; Time stays enabled and its helper says it is
+  ignored while a distance is set. The result panel dims the last `Ready` value
+  while `Computing`. The root has `imePadding()`; the shell's
+  `consumeWindowInsets(padding)` is what makes that land on the keyboard rather
+  than a bar's height above it.
+- **Settings** (`SettingsSurface.kt`) — `ListItem` rows under Recording /
+  Diagnostics / About: an inline `selectableGroup` radio list for the GPS
+  device (lazy `BLUETOOTH_CONNECT` from an "Allow" row), the debug-NMEA switch,
+  "Share latest log" (disabled with a reason while `latestDebugLog` is null),
+  the version, and one updater row whose slots follow `UpdateState`.
 
-`ui/Theme.kt` applies the dynamic (Material You) light/dark schemes; at minSdk
-34 they are always available, so there is no fallback palette.
+`ui/Components.kt` holds the shared pieces: `SurfaceHeader`, `SectionHeader`,
+`Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
+`RecordingDot`, `ValueWithUnit`, `ControlLabel`, `ContentMaxWidth` (600 dp),
+`Gutter`, `ControlHeight`. `ui/Format.kt` and `ui/RecordStatus.kt` are pure
+Kotlin under JUnit — keep them free of Android imports; leaf composables take
+Strings and Booleans, never a `Formats`.
+
+`ui/Theme.kt` applies the dynamic (Material You) light/dark schemes with tabular
+figures (`tnum`) on the display/headline/title roles only; at minSdk 34 the
+schemes are always available, so there is no fallback palette.
+`res/values-night/themes.xml` makes the first frame dark. The UI carries no
+experimental Material opt-in — do not reintroduce `MaterialExpressiveTheme`
+(spring motion is wrong for a still recording screen, and its motion-scheme
+factories are internal in material3 1.4.0) or `material-icons-extended` (the
+core set covers every icon; Stop and Pause are text buttons by design). Motion
+budget: two `AnimatedVisibility` transitions (precise-location banner, selection
+tray) plus component-internal animation — no perpetual animation, no
+destination transitions, no elapsed-time ticker.
 
 ### Export
 
