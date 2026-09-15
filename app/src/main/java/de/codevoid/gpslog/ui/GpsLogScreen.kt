@@ -1,31 +1,9 @@
 package de.codevoid.gpslog.ui
 
-import android.annotation.SuppressLint
-import android.Manifest
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.LocationOn
@@ -37,52 +15,22 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import de.codevoid.gpslog.data.FilterSettings
-import de.codevoid.gpslog.data.RunInfo
-import de.codevoid.gpslog.service.LoggingState
 import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import kotlin.math.roundToInt
-
 
 private const val TAB_RECORD = 0
 private const val TAB_RUNS = 1
@@ -220,244 +168,3 @@ private fun GpsLogNavBar(
         )
     }
 }
-
-/** Recording-source picker plus the in-app nightly updater; home for future preferences. */
-@Composable
-internal fun SettingsTab(
-    modifier: Modifier,
-    recordingSource: String,
-    onSelectSource: (String) -> Unit,
-    debugLogging: Boolean,
-    onSetDebugLogging: (Boolean) -> Unit,
-    onShareDebugLog: () -> Unit,
-    installedVersion: String,
-    updateState: UpdateState,
-    onCheckUpdate: () -> Unit,
-    onDownloadInstall: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        RecordingSourceSection(
-            recordingSource = recordingSource,
-            onSelectSource = onSelectSource,
-        )
-        DebugSection(
-            debugLogging = debugLogging,
-            onSetDebugLogging = onSetDebugLogging,
-            onShareDebugLog = onShareDebugLog,
-        )
-        UpdateSection(
-            installedVersion = installedVersion,
-            updateState = updateState,
-            onCheckUpdate = onCheckUpdate,
-            onDownloadInstall = onDownloadInstall,
-        )
-    }
-}
-
-/**
- * Chooses the run's fix source: the internal GPS (`""`) or a paired classic-Bluetooth GNSS
- * receiver. Reading the paired-device list and its names needs `BLUETOOTH_CONNECT`, requested lazily
- * here so an internal-only user is never prompted. Bluetooth Class-of-Device carries no "GNSS" flag,
- * so every classic/dual paired device is listed and the user picks the right one.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@SuppressLint("MissingPermission")
-@Composable
-private fun RecordingSourceSection(
-    recordingSource: String,
-    onSelectSource: (String) -> Unit,
-) {
-    val context = LocalContext.current
-    var granted by remember {
-        mutableStateOf(
-            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted = it }
-
-    val adapter = remember { context.getSystemService(BluetoothManager::class.java)?.adapter }
-    val devices = remember(granted, adapter) {
-        if (granted && adapter != null) {
-            adapter.bondedDevices.orEmpty()
-                .filter {
-                    it.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
-                        it.type == BluetoothDevice.DEVICE_TYPE_DUAL
-                }
-                .map { (it.name ?: it.address) to it.address }
-                .sortedBy { it.first.lowercase(Locale.getDefault()) }
-        } else {
-            emptyList()
-        }
-    }
-    val options = listOf("Internal" to "") + devices
-    // A previously-selected device that is no longer paired still shows its raw MAC.
-    val currentLabel = options.firstOrNull { it.second == recordingSource }?.first ?: recordingSource
-
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("GPS device", style = MaterialTheme.typography.titleMedium)
-
-            var expanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
-            ) {
-                OutlinedTextField(
-                    value = currentLabel,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Recording source") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        .fillMaxWidth(),
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                ) {
-                    options.forEach { (label, mac) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                onSelectSource(mac)
-                                expanded = false
-                            },
-                        )
-                    }
-                }
-            }
-
-            if (!granted) {
-                Text(
-                    "Grant Bluetooth access to record from a paired external receiver.",
-                    color = MaterialTheme.colorScheme.outline,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedButton(
-                    onClick = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Grant Bluetooth access")
-                }
-            } else if (recordingSource.isNotEmpty()) {
-                Text(
-                    "Records from the external receiver; the phone's own GPS stays free for navigation.",
-                    color = MaterialTheme.colorScheme.outline,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpdateSection(
-    installedVersion: String,
-    updateState: UpdateState,
-    onCheckUpdate: () -> Unit,
-    onDownloadInstall: () -> Unit,
-) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Stat("Version", installedVersion)
-            when (val s = updateState) {
-                is UpdateState.Downloading -> {
-                    Text("Downloading… ${(s.progress * 100).roundToInt()}%")
-                    LinearProgressIndicator(
-                        progress = { s.progress },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                is UpdateState.Available -> {
-                    Text(
-                        "Update available: dev-${s.nightly.sha}",
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Button(onClick = onDownloadInstall, modifier = Modifier.fillMaxWidth()) {
-                        Text("Download & install")
-                    }
-                }
-                else -> {
-                    OutlinedButton(
-                        onClick = onCheckUpdate,
-                        enabled = s != UpdateState.Checking,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (s == UpdateState.Checking) "Checking…" else "Check for updates")
-                    }
-                    when (s) {
-                        UpdateState.UpToDate -> Text(
-                            "You're on the latest development build.",
-                            color = MaterialTheme.colorScheme.outline,
-                        )
-                        is UpdateState.Error -> Text(
-                            s.message,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        else -> {}
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Diagnostics: when enabled, a run captures a text log — the raw NMEA plus, for the internal GPS,
- * the chipset model and capabilities — so the receiver's constellations, delivery rate and HDOP can
- * be inspected. Works for both sources (the internal chipset's NMEA is read via `addNmeaListener`).
- */
-@Composable
-private fun DebugSection(
-    debugLogging: Boolean,
-    onSetDebugLogging: (Boolean) -> Unit,
-    onShareDebugLog: () -> Unit,
-) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Debug NMEA log", style = MaterialTheme.typography.titleMedium)
-                Switch(checked = debugLogging, onCheckedChange = onSetDebugLogging)
-            }
-            Text(
-                "Records the raw NMEA to a text file you can share — plus the chipset model and " +
-                    "capabilities when the internal GPS is selected.",
-                color = MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            OutlinedButton(onClick = onShareDebugLog, modifier = Modifier.fillMaxWidth()) {
-                Text("Share debug log")
-            }
-        }
-    }
-}
-
