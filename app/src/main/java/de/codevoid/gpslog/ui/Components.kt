@@ -35,6 +35,12 @@ internal val Gutter = 16.dp
 /** Height of the primary verb buttons (Start/Stop/Pause, Delete/Merge, Export). */
 internal val ControlHeight = 56.dp
 
+/** Label of a [ControlHeight] button: one step up from the button default so it reads at 56 dp. */
+@Composable
+internal fun ControlLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium)
+}
+
 /** A surface's title row; there is no app bar. [trailing] sits at the end of the row. */
 @Composable
 internal fun SurfaceHeader(title: String, trailing: @Composable RowScope.() -> Unit = {}) {

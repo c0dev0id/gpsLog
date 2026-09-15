@@ -37,9 +37,6 @@ class Formats(locale: Locale, zone: ZoneId) {
     /** One decimal, half-up: 3.24 → "3.2", 12.96 → "13.0"; null → [DASH]. */
     fun decimal(v: Float?): String = v?.let { oneDecimal.format(it.toDouble()) } ?: DASH
 
-    /** "12 / 24" — satellites used in the fix versus visible. */
-    fun satellites(used: Int, visible: Int): String = "$used / $visible"
-
     /** Wall-clock time of day with seconds; null → [DASH]. */
     fun clock(millis: Long?): String = millis?.let { clockFmt.format(Instant.ofEpochMilli(it)) } ?: DASH
 

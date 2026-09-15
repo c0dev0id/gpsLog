@@ -46,12 +46,6 @@ class FormatTest {
     }
 
     @Test
-    fun satellitesReadsUsedOverVisible() {
-        assertEquals("12 / 24", us.satellites(12, 24))
-        assertEquals("0 / 0", us.satellites(0, 0))
-    }
-
-    @Test
     fun clockFormatsTimeOfDayInTheGivenZone() {
         assertEquals("14:23:07", us.clock(51_787_000L))
         assertEquals("00:00:00", us.clock(0L))

@@ -83,7 +83,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
 
 private const val TAB_RECORD = 0
@@ -220,40 +219,6 @@ private fun GpsLogNavBar(
             },
             label = { Text("Settings", maxLines = 1) },
         )
-    }
-}
-
-@Composable
-internal fun RecordTab(
-    modifier: Modifier,
-    state: LoggingState,
-    preciseLocation: Boolean,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onPause: () -> Unit,
-    onUnpause: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (!preciseLocation) {
-            PreciseLocationBanner(onOpenSettings)
-        }
-        RecordingControls(
-            isLogging = state.isLogging,
-            isPaused = state.isPaused,
-            enabled = preciseLocation || state.isLogging,
-            onStart = onStart,
-            onStop = onStop,
-            onPause = onPause,
-            onUnpause = onUnpause,
-        )
-        LiveStats(state)
     }
 }
 
@@ -667,126 +632,6 @@ private fun ExportResult(preview: ExportPreview) {
                 }
             }
         }
-    }
-}
-
-/**
- * Without precise location Android silently degrades GPS_PROVIDER to fuzzed fixes every 10 min
- * and never delivers GnssStatus, so logging is pointless; say so instead of starting a dead run.
- */
-@Composable
-private fun PreciseLocationBanner(onOpenSettings: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                "Precise location is required. Allow \"Precise\" location for gpsLog in the system settings.",
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
-            OutlinedButton(onClick = onOpenSettings) { Text("Open app settings") }
-        }
-    }
-}
-
-@Composable
-private fun RecordingControls(
-    isLogging: Boolean,
-    isPaused: Boolean,
-    enabled: Boolean,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onPause: () -> Unit,
-    onUnpause: () -> Unit,
-) {
-    if (!isLogging) {
-        Button(
-            onClick = onStart,
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Start", style = MaterialTheme.typography.titleLarge)
-        }
-    } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onStop,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            ) {
-                Text("Stop", style = MaterialTheme.typography.titleLarge)
-            }
-            OutlinedButton(
-                onClick = if (isPaused) onUnpause else onPause,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(if (isPaused) "Resume" else "Pause", style = MaterialTheme.typography.titleLarge)
-            }
-        }
-    }
-}
-
-/** Always visible; before a run is started every live value reads "—". */
-@Composable
-private fun LiveStats(state: LoggingState) {
-    val logging = state.isLogging
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Stat("Started", state.startTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
-            // Pausing releases the receiver, so gnssRunning goes false — say "Paused", not
-            // "Receiver off", and drop the good/bad colouring that no longer means anything.
-            Stat(
-                "GPS",
-                if (!logging) "—" else when {
-                    state.isPaused -> "Paused"
-                    !state.gpsEnabled -> "Disabled"
-                    !state.gnssRunning -> "Receiver off"
-                    state.hasFix -> "Fix"
-                    else -> "Searching"
-                },
-                highlight = if (logging && !state.isPaused) state.gpsEnabled && state.hasFix else null,
-            )
-            Stat(
-                "Satellites",
-                if (logging && !state.isPaused) {
-                    "${state.satellitesUsedInFix} used / ${state.satellitesVisible} visible"
-                } else {
-                    "—"
-                },
-            )
-            Stat("Points", if (logging) state.pointCount.toString() else "—")
-            Stat(
-                "Rate",
-                if (logging && !state.isPaused) String.format(Locale.US, "%.1f Hz", state.updateRateHz) else "—",
-            )
-            Stat("GPS time", state.lastFixTimeMillis?.let { timeFmt.format(Instant.ofEpochMilli(it)) } ?: "—")
-            Stat("Speed", state.speedMetersPerSecond?.let { String.format(Locale.US, "%.1f m/s", it) } ?: "—")
-            Stat("Accuracy", state.accuracyMeters?.let { String.format(Locale.US, "%.1f m", it) } ?: "—")
-        }
-    }
-}
-
-/** [highlight] null keeps the default colour; true/false colour the value as good/bad. */
-@Composable
-private fun Stat(label: String, value: String, highlight: Boolean? = null) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.outline)
-        Text(
-            value,
-            color = when (highlight) {
-                null -> Color.Unspecified
-                true -> MaterialTheme.colorScheme.primary
-                false -> MaterialTheme.colorScheme.error
-            },
-        )
     }
 }
 
