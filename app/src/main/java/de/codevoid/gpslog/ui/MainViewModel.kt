@@ -10,6 +10,7 @@ import de.codevoid.gpslog.data.RunReader
 import de.codevoid.gpslog.export.GpxExporter
 import de.codevoid.gpslog.export.PointFilter
 import de.codevoid.gpslog.service.LoggingService
+import de.codevoid.gpslog.service.LoggingState
 import de.codevoid.gpslog.service.LoggingStateHolder
 import de.codevoid.gpslog.update.Nightly
 import de.codevoid.gpslog.update.UpdateChecker
@@ -41,6 +42,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = App.from(app).settings
 
     val loggingState = LoggingStateHolder.state
+
+    /**
+     * Which run is being logged and whether it is paused — all the shell (navigation badge) and
+     * the Runs list need. Collecting this instead of [loggingState] keeps the 2 s point/rate ticks
+     * from recomposing anything but the Record surface; the StateFlow only emits on a change.
+     */
+    val activeRun: StateFlow<ActiveRun?> = loggingState
+        .map { it.toActiveRun() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), loggingState.value.toActiveRun())
+
     val filters = settings.filters
 
     /** Recording source: `""` = internal GPS, otherwise a paired Bluetooth MAC. */
@@ -57,6 +68,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** False when the app holds only approximate location; the Activity keeps this current. */
     private val _preciseLocation = MutableStateFlow(true)
     val preciseLocation = _preciseLocation.asStateFlow()
+
+    /**
+     * The most recent captured NMEA debug log, or null when none exists. Refreshed with the run
+     * list — on resume and whenever a run starts or stops, which is exactly when a log can appear.
+     */
+    private val _latestDebugLog = MutableStateFlow<File?>(null)
+    val latestDebugLog = _latestDebugLog.asStateFlow()
 
     /** e.g. `dev-abc1234` for a nightly, `0.0.1` for a tagged/local build. */
     val installedVersion: String =
@@ -162,9 +180,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshRuns() {
         viewModelScope.launch {
-            _runs.value = withContext(Dispatchers.IO) { repo.listRuns() }
+            val (list, log) = withContext(Dispatchers.IO) { repo.listRuns() to newestDebugLog() }
+            _runs.value = list
+            _latestDebugLog.value = log
         }
     }
+
+    private fun newestDebugLog(): File? =
+        File(getApplication<Application>().cacheDir, "debug")
+            .listFiles()
+            ?.filter { it.isFile }
+            ?.maxByOrNull { it.lastModified() }
 
     fun start() = LoggingService.start(getApplication())
 
@@ -175,6 +201,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun unpause() = LoggingService.unpause(getApplication())
 
     fun toggleSelect(id: Long) = _selected.update { if (id in it) it - id else it + id }
+
+    fun clearSelection() {
+        _selected.value = emptySet()
+    }
 
     /** The active run cannot be deleted or merged while it is being written to. */
     private fun activeRunId(): Long? = loggingState.value.let { if (it.isLogging) it.runId else null }
@@ -206,13 +236,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDebugLogging(enabled: Boolean) = settings.setDebugLogging(enabled)
 
-    /** The most recent captured NMEA debug log, or null if none has been recorded. */
-    fun latestDebugLog(): File? =
-        File(getApplication<Application>().cacheDir, "debug")
-            .listFiles()
-            ?.filter { it.isFile }
-            ?.maxByOrNull { it.lastModified() }
-
     fun setAccuracyMeters(value: Int) = settings.setAccuracyMeters(value)
 
     fun setDistanceMeters(value: Float) = settings.setDistanceMeters(value)
@@ -236,14 +259,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-/** Preview of the current export selection after filters, surfaced on the Export tab. */
+/** The run being logged, reduced to what the shell and the Runs list display. */
+data class ActiveRun(val id: Long, val paused: Boolean)
+
+private fun LoggingState.toActiveRun(): ActiveRun? =
+    if (isLogging) runId?.let { ActiveRun(it, isPaused) } else null
+
+/** Preview of the current export selection after filters, surfaced on the Export surface. */
 sealed interface ExportPreview {
     data object Empty : ExportPreview
     data object Computing : ExportPreview
     data class Ready(val tracks: Int, val totalPoints: Long, val keptPoints: Long) : ExportPreview
 }
 
-/** State of the in-app nightly updater surfaced on the Record tab. */
+/** State of the in-app nightly updater, surfaced on the Settings surface. */
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
