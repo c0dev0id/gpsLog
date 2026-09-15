@@ -83,7 +83,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
 
 private const val TAB_RECORD = 0
 private const val TAB_RUNS = 1
@@ -462,77 +461,6 @@ private fun DebugSection(
     }
 }
 
-@Composable
-internal fun RunsTab(
-    modifier: Modifier,
-    runs: List<RunInfo>,
-    selected: Set<Long>,
-    activeRunId: Long?,
-    onToggleSelect: (Long) -> Unit,
-    onDeleteSelected: () -> Unit,
-    onMergeSelected: () -> Unit,
-) {
-    // The active run can be selected (for export) but not deleted or merged while it is logging.
-    val actionable = selected.count { it != activeRunId }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        if (runs.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "No runs yet — start recording on the Record tab.",
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(runs, key = { it.id }) { run ->
-                    RunRow(
-                        run = run,
-                        selected = run.id in selected,
-                        isActive = run.id == activeRunId,
-                        onToggleSelect = { onToggleSelect(run.id) },
-                    )
-                }
-            }
-        }
-
-        if (selected.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onMergeSelected,
-                    enabled = actionable >= 2,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Merge ($actionable)")
-                }
-                Button(
-                    onClick = onDeleteSelected,
-                    enabled = actionable >= 1,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Delete ($actionable)")
-                }
-            }
-        }
-    }
-}
-
 /**
  * The selection's export surface: a summary of what is selected, the accuracy/distance/time
  * filters, a live preview of the filtered result, and a single Export action that hands the GPX to
@@ -678,53 +606,3 @@ private fun FloatFilterField(
     )
 }
 
-/**
- * Selection is an explicit checkbox; the whole card is also clickable to toggle it. Deletion and
- * merging act on the multiselection from the buttons below the list, so the row carries no per-row
- * action. The active run still shows its recording dot and cannot be deleted or merged.
- */
-@Composable
-private fun RunRow(
-    run: RunInfo,
-    selected: Boolean,
-    isActive: Boolean,
-    onToggleSelect: () -> Unit,
-) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = if (selected) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-        } else {
-            CardDefaults.cardColors()
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggleSelect() },
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = selected, onCheckedChange = null)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(dateTimeFmt.format(Instant.ofEpochMilli(run.startTimeMillis)))
-                Text(
-                    "→ ${dateTimeFmt.format(Instant.ofEpochMilli(run.endTimeMillis))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-            Text("${run.pointCount} pts")
-            if (isActive) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = 12.dp)
-                        .size(10.dp)
-                        .background(MaterialTheme.colorScheme.error, CircleShape)
-                )
-            }
-        }
-    }
-}
