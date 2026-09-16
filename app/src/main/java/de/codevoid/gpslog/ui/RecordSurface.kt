@@ -282,7 +282,7 @@ private fun StateHero(word: String, wordColor: Color, subtitle: String, modifier
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             word,
-            style = MaterialTheme.typography.displaySmall,
+            style = MaterialTheme.typography.headlineLarge,
             color = wordColor,
             modifier = Modifier.semantics { contentDescription = "GPS status: $word" },
         )
@@ -341,10 +341,9 @@ private fun RecordControls(
 
 /**
  * Three fixed rows of two tiles — no flow layout, so a tick costs no measurement pass. While
- * [spread] the rows share [minHeight] evenly and the numerals take the next type step, so a wide
- * window's extra room becomes legible values rather than empty card. The height is asked of the
- * rows themselves rather than of the panel, so it does not depend on `Surface` passing a minimum
- * constraint through to its content.
+ * [spread] the rows share [minHeight], so a wide window's extra room goes between them. The height
+ * is asked of the rows themselves rather than of the panel, so it does not depend on `Surface`
+ * passing a minimum constraint through to its content.
  */
 @Composable
 private fun StatsGrid(
@@ -371,34 +370,30 @@ private fun StatsGrid(
                     label = "Satellites in use",
                     value = satellitesUsed,
                     unit = "of $satellitesVisible",
-                    large = spread,
                     modifier = Modifier.weight(1f),
                 )
                 StatTile(
                     label = "Accuracy",
                     value = accuracy,
                     unit = "m",
-                    large = spread,
                     modifier = Modifier.weight(1f),
                 )
             }
             StatRow {
-                StatTile(label = "Points", value = points, unit = null, large = spread, modifier = Modifier.weight(1f))
-                StatTile(label = "Rate", value = rate, unit = "Hz", large = spread, modifier = Modifier.weight(1f))
+                StatTile(label = "Points", value = points, unit = null, modifier = Modifier.weight(1f))
+                StatTile(label = "Rate", value = rate, unit = "Hz", modifier = Modifier.weight(1f))
             }
             StatRow {
                 StatTile(
                     label = "Speed",
                     value = speed,
                     unit = "m/s",
-                    large = spread,
                     modifier = Modifier.weight(1f),
                 )
                 StatTile(
                     label = "GPS time",
                     value = gpsTime,
                     unit = null,
-                    large = spread,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -418,11 +413,11 @@ private fun StatRow(content: @Composable RowScope.() -> Unit) {
 
 /** One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). */
 @Composable
-private fun StatTile(label: String, value: String, unit: String?, large: Boolean, modifier: Modifier = Modifier) {
+private fun StatTile(label: String, value: String, unit: String?, modifier: Modifier = Modifier) {
     Column(modifier = modifier.semantics(mergeDescendants = true) {}) {
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -430,11 +425,7 @@ private fun StatTile(label: String, value: String, unit: String?, large: Boolean
         ValueWithUnit(
             value = value,
             unit = unit,
-            valueStyle = if (large) {
-                MaterialTheme.typography.headlineMedium
-            } else {
-                MaterialTheme.typography.headlineSmall
-            },
+            valueStyle = MaterialTheme.typography.headlineSmall,
             valueColor = if (value == DASH) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 4.dp),
         )

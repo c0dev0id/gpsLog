@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -33,8 +34,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+
+/** A phone's bar keeps Material's default glyph; the rail is read from further away, so it grows. */
+private val BarIconSize = 24.dp
+private val RailIconSize = 28.dp
 
 private const val TAB_RECORD = 0
 private const val TAB_RUNS = 1
@@ -88,7 +95,7 @@ fun GpsLogScreen(
                         NavigationBarItem(
                             selected = tab == d.index,
                             onClick = { select(d.index) },
-                            icon = { DestinationIcon(d, tab == d.index, recording, paused) },
+                            icon = { DestinationIcon(d, tab == d.index, recording, paused, BarIconSize) },
                             label = { Text(d.label, maxLines = 1) },
                         )
                     }
@@ -110,8 +117,10 @@ fun GpsLogScreen(
                         NavigationRailItem(
                             selected = tab == d.index,
                             onClick = { select(d.index) },
-                            icon = { DestinationIcon(d, tab == d.index, recording, paused) },
-                            label = { Text(d.label, maxLines = 1) },
+                            icon = { DestinationIcon(d, tab == d.index, recording, paused, RailIconSize) },
+                            label = {
+                                Text(d.label, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                            },
                         )
                     }
                 }
@@ -141,9 +150,19 @@ fun GpsLogScreen(
  * wallpapers).
  */
 @Composable
-private fun DestinationIcon(destination: Destination, selected: Boolean, recording: Boolean, paused: Boolean) {
+private fun DestinationIcon(
+    destination: Destination,
+    selected: Boolean,
+    recording: Boolean,
+    paused: Boolean,
+    iconSize: Dp,
+) {
     val icon: @Composable () -> Unit = {
-        Icon(if (selected) destination.selectedIcon else destination.icon, contentDescription = null)
+        Icon(
+            if (selected) destination.selectedIcon else destination.icon,
+            contentDescription = null,
+            modifier = Modifier.size(iconSize),
+        )
     }
     if (destination.index == TAB_RECORD) {
         val description = when {
