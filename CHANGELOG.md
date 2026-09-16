@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Starting a run on a device with no GPS chipset — a Wi-Fi-only tablet, say — crashed the app. Such a device is now a supported configuration rather than a crash: Record reads "No GPS device" with Start disabled, Settings says "No GPS device found" where the device is named and its picker will not let the internal chipset be chosen, and an external Bluetooth receiver records there exactly as it does anywhere else
+- Start was offered while Location was switched off in system settings: Record read "Ready", and only after the tap — run file created, notification posted — did it admit "GPS disabled". It now says so before the tap, with Start disabled
+- The GPS device picker could not see a receiver paired while the app was open, and said nothing about pairing one; it now re-reads when opened and offers a way straight to the system Bluetooth settings
 - A run left open when the device rebooted could crash the app on every boot, if location permission was missing or granted only "while using the app" — a Bluetooth-only setup has no reason to hold it. The service now stops quietly instead, and keeps the run resumable
 - A connecting or reconnecting Bluetooth receiver is reported as "Receiver off" on the Record screen instead of "GPS disabled"
 - Sharing the debug log while none existed silently did nothing; the row is now disabled until a log has been captured

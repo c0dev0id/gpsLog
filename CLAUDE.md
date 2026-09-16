@@ -290,12 +290,15 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   them. `recordStatus` maps a false `gpsEnabled` to *Receiver off* for an
   external source (the service initialises it internal-only and drops it on a
   Bluetooth disconnect) and to *GPS disabled* for the internal one, and
-  returns *No GPS device* when the internal source is chosen on a device with
-  no chipset — ranked above *Unavailable*, since a missing chipset is not
-  something a permission grant fixes, and idle-only, because a run already
-  going reports what it is doing. Start is enabled exactly when the status is
-  *Ready*, so the word and the button cannot disagree; for the same reason the
-  precise-location banner stays down while the status is *No GPS device*.
+  answers the idle case too, ranked outermost obstacle first: *No GPS device*
+  (no chipset), *GPS disabled* (Location switched off), *Unavailable* (no
+  precise location). All three are internal-source-only and idle-only — a run
+  already going reports what it is doing. Start is enabled exactly when the
+  status is *Ready*, so the word and the button cannot disagree; for the same
+  reason the precise-location banner stays down while the status is *No GPS
+  device*. `internalGpsEnabled` is a `StateFlow` re-read in `onResume`, like
+  `preciseLocation`: the Location switch moves outside the app, and one
+  boolean does not earn a `PROVIDERS_CHANGED_ACTION` receiver.
 - **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows with ONE
   `combinedClickable` in both modes: tap opens the run's Export page, long-press
   toggles selection; selection mode is derived (`selected.isNotEmpty()`), shows
@@ -327,7 +330,13 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   unbounded, so it must not sit inline. On a device with no chipset the row
   and the picker's internal option both read "No GPS device found" (one
   `private const val`, so they cannot drift apart) and that option is
-  disabled rather than hidden. The debug-NMEA switch,
+  disabled rather than hidden — which makes the picker's note the only way
+  forward, so it is never silence: `PickerNote` carries either *Allow* (the
+  permission) or *Pair* (the system Bluetooth settings, since this app does
+  no pairing). The bonded set and the permission are re-read when the picker
+  opens, not once per composition — this surface survives the trip to system
+  settings, so a device paired there would otherwise never appear — and
+  *Pair* closes the dialog so the next open re-reads. The debug-NMEA switch,
   "Share latest log" (disabled with a reason while `latestDebugLog` is null),
   the version, and one updater row whose slots follow `UpdateState`.
 
