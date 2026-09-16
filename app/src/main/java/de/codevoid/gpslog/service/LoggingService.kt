@@ -138,10 +138,10 @@ class LoggingService : Service(), FixSink {
             stopSelf()
             return
         }
-        handler.post { startLogging(id) }
+        handler.post { startLogging(id, newRun) }
     }
 
-    private fun startLogging(id: Long) {
+    private fun startLogging(id: Long, newRun: Boolean) {
         val file = runs.runFile(id)
         runId = id
         pointCount = RunReader.pointCount(file)
@@ -154,7 +154,11 @@ class LoggingService : Service(), FixSink {
         paused = settings.isPaused()
         // Acquired before the writer exists so a refusal leaves no empty run file behind.
         if (!paused && !startSource()) {
-            stopLoggingInternal(clearActive = true)
+            // Same rule as the foreground-service refusal above: only a run that never began
+            // gives up its marker. This path is reached from RESUME and the sticky restart too,
+            // and at BOOT_COMPLETED the Bluetooth adapter is routinely not up yet — clearing
+            // here ended a live multi-hour run the user never stopped, permanently.
+            stopLoggingInternal(clearActive = newRun)
             return
         }
         writer = RunWriter(file)
