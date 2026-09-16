@@ -54,9 +54,9 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * Preferences as list rows in three groups: the recording source (an inline radio list, so the
- * choice and its alternatives are visible at once), diagnostics (the debug NMEA log and its share
- * row) and About (the version and the nightly updater).
+ * Preferences as list rows in three groups: the recording source (one row naming the current
+ * device, which opens a picker dialog), diagnostics (the debug NMEA log and its share row) and
+ * About (the version and the nightly updater).
  */
 @Composable
 internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onInstall: (File) -> Unit) {
@@ -102,12 +102,6 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
     }
 }
 
-/**
- * Chooses the run's fix source: the internal GPS (`""`) or a paired classic-Bluetooth GNSS
- * receiver. Reading the paired-device list and its names needs `BLUETOOTH_CONNECT`, requested
- * lazily from an "Allow" row so an internal-only user is never prompted. Bluetooth Class-of-Device
- * carries no "GNSS" flag, so every classic/dual paired device is listed and the user picks.
- */
 /**
  * Chooses the run's fix source: the internal GPS (`""`) or a paired classic-Bluetooth GNSS
  * receiver. Collapsed to one row that names the current source and opens a picker, because the

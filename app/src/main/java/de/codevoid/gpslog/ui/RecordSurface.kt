@@ -301,8 +301,9 @@ private fun StateHero(word: String, wordColor: Color, subtitle: String, modifier
 
 /**
  * Stop on the left, Pause/Resume under the right thumb. Exactly one filled primary button is on
- * screen at a time and it is always the "make it record" verb; Stop wears the container tone
- * because a mis-tap loses nothing (Merge rejoins the runs). Takes primitives so it skips on ticks.
+ * screen at a time and it is always the "make it record" verb; Stop is outlined in `error`, like
+ * Delete on the Runs tray, so the terminal action reads as terminal without being the heaviest
+ * thing on the screen. Takes primitives so it skips on ticks.
  */
 @Composable
 private fun RecordControls(
