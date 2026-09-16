@@ -241,8 +241,8 @@ collects its own flows, so a 2 s `LoggingState` tick recomposes
   it advances with fixes and freezes while paused (no ticking clock). 56 dp
   text-only controls: Stop on the left in `errorContainer`, Pause/Resume on the
   right, one filled-primary button at a time. Six tabular-numeral tiles in one
-  `Panel` stay mounted while idle showing `—`; the Accuracy tile flags a fix
-  worse than the export accuracy filter. `recordStatus` maps a false
+  `Panel` stay mounted while idle showing `—`. Recording is independent of the
+  export filters: nothing on Record reads them. `recordStatus` maps a false
   `gpsEnabled` to *Receiver off* for an external source (the service
   initialises it internal-only and drops it on a Bluetooth disconnect) and to
   *GPS disabled* for the internal one.

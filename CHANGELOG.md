@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Delete asks for confirmation before removing runs; Merge, which loses nothing, does not
-- The Accuracy tile on Record is highlighted when the live fix is worse than the export accuracy filter, so a fix that would be dropped at export is visible while recording
 - "Share latest log" on Settings shows when the log was captured and is disabled with a note while no log exists
 - A Clear action in the Runs header drops a multi-row selection at once
 - Pause/Resume, on the Record tab and as a notification action: pausing releases the GPS receiver (or the Bluetooth link) outright, so a paused run draws no battery rather than nearly as much as a recording one, and it stays paused across a reboot or a process kill. Resuming re-acquires the receiver, which is quick because the GPS ephemeris is still cached. The timestamp gap produces a new track segment on export automatically. The Record item's dot turns grey while paused (red while actively recording), the live stats read "Paused", and the notification shows the point count.

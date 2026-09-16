@@ -50,14 +50,12 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
     val state by vm.loggingState.collectAsStateWithLifecycle()
     val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
-    val filters by vm.filters.collectAsStateWithLifecycle()
     val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
 
     val external = recordingSource.isNotEmpty()
     val status = recordStatus(state, external, preciseLocation)
     // Receiver-dependent values mean nothing unless the source is actually delivering.
     val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
-    val accuracy = state.accuracyMeters
 
     val primary: @Composable (Modifier) -> Unit = { modifier ->
         RecordPrimary(
@@ -79,8 +77,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
         StatsGrid(
             satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
             satellitesVisible = state.satellitesVisible.toString(),
-            accuracy = if (live) f.decimal(accuracy) else DASH,
-            accuracyOverLimit = live && accuracy != null && accuracy > filters.accuracyMeters,
+            accuracy = if (live) f.decimal(state.accuracyMeters) else DASH,
             points = if (state.isLogging) f.count(state.pointCount) else DASH,
             rate = if (live) f.decimal(state.updateRateHz) else DASH,
             speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
@@ -278,7 +275,6 @@ private fun StatsGrid(
     satellitesUsed: String,
     satellitesVisible: String,
     accuracy: String,
-    accuracyOverLimit: Boolean,
     points: String,
     rate: String,
     speed: String,
@@ -293,13 +289,7 @@ private fun StatsGrid(
                 unit = "of $satellitesVisible",
                 modifier = Modifier.weight(1f),
             )
-            StatTile(
-                label = if (accuracyOverLimit) "Accuracy · over limit" else "Accuracy",
-                value = accuracy,
-                unit = "m",
-                alert = accuracyOverLimit,
-                modifier = Modifier.weight(1f),
-            )
+            StatTile(label = "Accuracy", value = accuracy, unit = "m", modifier = Modifier.weight(1f))
         }
         Row(
             modifier = Modifier
@@ -322,35 +312,22 @@ private fun StatsGrid(
     }
 }
 
-/**
- * One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). The label
- * may take a second line only in the alert state, so the idle grid never grows.
- */
+/** One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). */
 @Composable
-private fun StatTile(
-    label: String,
-    value: String,
-    unit: String?,
-    modifier: Modifier = Modifier,
-    alert: Boolean = false,
-) {
+private fun StatTile(label: String, value: String, unit: String?, modifier: Modifier = Modifier) {
     Column(modifier = modifier.semantics(mergeDescendants = true) {}) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (alert) 2 else 1,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         ValueWithUnit(
             value = value,
             unit = unit,
             valueStyle = MaterialTheme.typography.headlineSmall,
-            valueColor = when {
-                value == DASH -> MaterialTheme.colorScheme.outline
-                alert -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface
-            },
+            valueColor = if (value == DASH) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
