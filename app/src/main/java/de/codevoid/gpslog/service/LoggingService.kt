@@ -114,11 +114,23 @@ class LoggingService : Service(), FixSink {
         }
         if (running) return
         running = true
-        startForeground(
-            NOTIF_ID,
-            buildNotification(getString(R.string.notif_starting)),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-        )
+        val notification = buildNotification(getString(R.string.notif_starting))
+        try {
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } catch (e: RuntimeException) {
+            // The `location` service type needs ACCESS_COARSE or _FINE_LOCATION at runtime, and its
+            // policy is while-in-use only, so a background start — BootReceiver, a sticky restart —
+            // additionally needs ACCESS_BACKGROUND_LOCATION. The platform answers a shortfall by
+            // throwing, and Service.startForeground swallows only RemoteException, so it surfaced
+            // here on the main thread; with the marker outliving it, every boot died the same way.
+            Log.w(TAG, "foreground service refused; not logging", e)
+            running = false
+            // A run that never began leaves no marker behind; an interrupted one keeps its own, so
+            // it can still be resumed once the permission is there.
+            if (newRun) settings.clearActiveRun()
+            stopSelf()
+            return
+        }
         handler.post { startLogging(id) }
     }
 
