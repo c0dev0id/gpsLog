@@ -245,8 +245,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ids = deletableSelection(_selected.value)
         if (ids.size < 2) return
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { repo.merge(ids.toList()) }
-            _selected.value = emptySet()
+            val merged = withContext(Dispatchers.IO) { repo.merge(ids.toList()) }
+            // The merged run stays selected: merge-then-export is the reason to merge.
+            _selected.value = setOfNotNull(merged)
             refreshRuns()
         }
     }
