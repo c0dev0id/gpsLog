@@ -70,6 +70,8 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
     val one = chosen.singleOrNull()
 
     BackHandler { vm.closeExport() }
+    // Header, body and tray share one width so the Back arrow sits above the content's edge.
+    val maxWidth = if (wide) WideContentMaxWidth else ContentMaxWidth
 
     // imePadding keeps the pinned Share row above the keyboard while a filter field is focused.
     Column(
@@ -84,11 +86,12 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             },
+            maxWidth = maxWidth,
         )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .widthIn(max = if (wide) WideContentMaxWidth else ContentMaxWidth)
+                .widthIn(max = maxWidth)
                 .fillMaxWidth()
                 .align(Alignment.CenterHorizontally)
                 .verticalScroll(rememberScrollState())
@@ -128,7 +131,7 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
         }
         // Never disabled: the export runs the filter itself and does not read the preview, and the
         // panel already names a zero-point result.
-        ActionTray {
+        ActionTray(maxWidth = maxWidth) {
             Button(
                 onClick = onShare,
                 modifier = Modifier
@@ -282,7 +285,8 @@ private fun ResultPanel(preview: ExportPreview, f: Formats) {
                     valueColor = if (none) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
                 val (detail, detailColor) = when {
-                    empty -> "The selected runs have no points" to MaterialTheme.colorScheme.onSurfaceVariant
+                    empty -> (if (shown.tracks == 1) "This run has no points" else "These runs have no points") to
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     none -> "Every point is filtered out — raise the accuracy limit" to MaterialTheme.colorScheme.error
                     else -> "of ${f.count(shown.totalPoints)} · " +
                         "${f.plural(shown.tracks.toLong(), "track", "tracks")} · " +

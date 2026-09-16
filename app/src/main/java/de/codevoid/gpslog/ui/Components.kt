@@ -69,12 +69,13 @@ internal fun ControlLabel(text: String) {
 internal fun SurfaceHeader(
     title: String,
     leading: (@Composable () -> Unit)? = null,
+    maxWidth: Dp = ContentMaxWidth,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Row(
             modifier = Modifier
-                .widthIn(max = ContentMaxWidth)
+                .widthIn(max = maxWidth)
                 .fillMaxWidth()
                 .height(56.dp)
                 .padding(start = if (leading != null) 4.dp else Gutter, end = Gutter),
@@ -116,13 +117,13 @@ internal fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnSco
 
 /** A pinned row of verb buttons at the bottom of a surface; callers give each button weight(1f). */
 @Composable
-internal fun ActionTray(content: @Composable RowScope.() -> Unit) {
+internal fun ActionTray(maxWidth: Dp = ContentMaxWidth, content: @Composable RowScope.() -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             HorizontalDivider()
             Row(
                 modifier = Modifier
-                    .widthIn(max = ContentMaxWidth)
+                    .widthIn(max = maxWidth)
                     .fillMaxWidth()
                     .padding(horizontal = Gutter, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
