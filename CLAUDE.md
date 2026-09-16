@@ -78,6 +78,14 @@ key as the installed build.
 - **Platform `LocationManager` + `GPS_PROVIDER`**, not FusedLocationProvider
   (Play Services dependency, ~1 Hz cap, smoothing). `requestLocationUpdates`
   runs with `minTime=0, minDistance=0` to get the chipset's native rate.
+- **Internal GNSS is optional; a device without it is supported.** A Wi-Fi-only tablet
+  has no `GPS_PROVIDER` at all, and `requestLocationUpdates` throws
+  `IllegalArgumentException` for a provider that does not exist — on the `gps-logger`
+  thread, which took the process with it. `LocationManager.hasProvider` is the presence
+  question, asked in `LoggingService.startSource` (refuse) and once in
+  `MainViewModel.hasInternalGps` (a `val`: hardware cannot appear mid-process). Such a
+  device records from an external Bluetooth receiver like any other. `uses-feature
+  android.hardware.location.gps` is therefore `required="false"`.
 - **Precise location is mandatory.** A coarse-only app may still request
   `GPS_PROVIDER` without throwing, but fixes are fuzzed and throttled to one per
   10 minutes and `GnssStatus` never fires. `MainActivity` checks
@@ -106,7 +114,10 @@ is a paired Bluetooth MAC. **Every callback must arrive on the `gps-logger`
 HandlerThread** — that is what keeps the writer and its counters single-threaded.
 
 - *Internal*: `LocationListener` + `GnssStatus.Callback` registered on that
-  thread's `Looper`/`Executor`. Needs `ACCESS_FINE_LOCATION`.
+  thread's `Looper`/`Executor`. Needs `ACCESS_FINE_LOCATION` and a `GPS_PROVIDER` that
+  exists (`hasProvider`). `isProviderEnabled` is only specified for a provider that
+  exists, so both of its call sites go through `internalGpsEnabled()`, which asks
+  presence first.
 - *External*: `service/BluetoothNmeaSource` opens an RFCOMM socket on the SPP
   UUID and reads it on its **own** `gps-bt-reader` thread — a blocking socket
   read must never sit on `gps-logger` and starve the flush and notification
@@ -263,7 +274,13 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   Recording is independent of the export filters: nothing on Record reads
   them. `recordStatus` maps a false `gpsEnabled` to *Receiver off* for an
   external source (the service initialises it internal-only and drops it on a
-  Bluetooth disconnect) and to *GPS disabled* for the internal one.
+  Bluetooth disconnect) and to *GPS disabled* for the internal one, and
+  returns *No GPS device* when the internal source is chosen on a device with
+  no chipset — ranked above *Unavailable*, since a missing chipset is not
+  something a permission grant fixes, and idle-only, because a run already
+  going reports what it is doing. Start is enabled exactly when the status is
+  *Ready*, so the word and the button cannot disagree; for the same reason the
+  precise-location banner stays down while the status is *No GPS device*.
 - **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows with ONE
   `combinedClickable` in both modes: tap opens the run's Export page, long-press
   toggles selection; selection mode is derived (`selected.isNotEmpty()`), shows
@@ -292,7 +309,10 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   Diagnostics / About: one row naming the current GPS device, opening an
   `AlertDialog` picker (internal plus every paired classic device, scrollable,
   lazy `BLUETOOTH_CONNECT` from an "Allow" row inside it). The list is
-  unbounded, so it must not sit inline. The debug-NMEA switch,
+  unbounded, so it must not sit inline. On a device with no chipset the row
+  and the picker's internal option both read "No GPS device found" (one
+  `private const val`, so they cannot drift apart) and that option is
+  disabled rather than hidden. The debug-NMEA switch,
   "Share latest log" (disabled with a reason while `latestDebugLog` is null),
   the version, and one updater row whose slots follow `UpdateState`.
 

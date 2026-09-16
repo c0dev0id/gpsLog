@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pause/Resume, on the Record tab and as a notification action: pausing releases the GPS receiver (or the Bluetooth link) outright, so a paused run draws no battery rather than nearly as much as a recording one, and it stays paused across a reboot or a process kill. Resuming re-acquires the receiver, which is quick because the GPS ephemeris is still cached. The timestamp gap produces a new track segment on export automatically. The Record item's dot turns grey while paused (red while actively recording), the live stats read "Paused", and the notification shows the point count.
 
 ### Fixed
+- Starting a run on a device with no GPS chipset — a Wi-Fi-only tablet, say — crashed the app. Such a device is now a supported configuration rather than a crash: Record reads "No GPS device" with Start disabled, Settings says "No GPS device found" where the device is named and its picker will not let the internal chipset be chosen, and an external Bluetooth receiver records there exactly as it does anywhere else
 - A connecting or reconnecting Bluetooth receiver is reported as "Receiver off" on the Record screen instead of "GPS disabled"
 - Sharing the debug log while none existed silently did nothing; the row is now disabled until a log has been captured
 - Notification no longer shows stale point/rate data while a Bluetooth receiver is disconnected; it now immediately updates to "Receiver disconnected — reconnecting…"
