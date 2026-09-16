@@ -65,6 +65,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _selected = MutableStateFlow<Set<Long>>(emptySet())
     val selected = _selected.asStateFlow()
 
+    /**
+     * The runs the Export page is open for; empty means the page is closed. Kept apart from
+     * [selected] so a tap on one run, or on the latest run from Record, opens its page without
+     * touching a selection made on Runs, and Back returns to that selection intact. Not saved
+     * across process death on purpose: it dies with the half-edited page it belongs to.
+     */
+    private val _exportTarget = MutableStateFlow<Set<Long>>(emptySet())
+    val exportTarget = _exportTarget.asStateFlow()
+
+    fun openExport(ids: Set<Long>) {
+        if (ids.isNotEmpty()) _exportTarget.value = ids
+    }
+
+    fun closeExport() {
+        _exportTarget.value = emptySet()
+    }
+
     /** False when the app holds only approximate location; the Activity keeps this current. */
     private val _preciseLocation = MutableStateFlow(true)
     val preciseLocation = _preciseLocation.asStateFlow()
@@ -96,14 +113,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Live preview of the current selection + filters: track count, raw point total and how many
-     * points survive filtering. Recomputed off the main thread whenever the selection, the filters
+     * Live preview of the export subject + filters: track count, raw point total and how many
+     * points survive filtering. Recomputed off the main thread whenever the subject, the filters
      * or the run list change; a superseded computation is cancelled by [transformLatest].
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val exportPreview: StateFlow<ExportPreview> =
-        combine(selected, filters, runs) { sel, filt, runList ->
-            runList.filter { it.id in sel } to filt
+        combine(exportTarget, filters, runs) { target, filt, runList ->
+            runList.filter { it.id in target } to filt
         }.transformLatest { (chosen, filt) ->
             if (chosen.isEmpty()) {
                 emit(ExportPreview.Empty)
@@ -245,11 +262,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setTimeSeconds(value: Int) = settings.setTimeSeconds(value)
 
     /**
-     * Streams the selected runs as one GPX document to [out], closing it when done. Runs on IO;
+     * Streams the runs the Export page is open for as one GPX document to [out], closing it when done. Runs on IO;
      * [onDone] is invoked on the main thread afterwards (used to fire the share intent).
      */
-    fun exportSelected(out: OutputStream, onDone: () -> Unit = {}) {
-        val ids = _selected.value
+    fun export(out: OutputStream, onDone: () -> Unit = {}) {
+        val ids = _exportTarget.value
         val current = _runs.value.filter { it.id in ids }
         val filterSnapshot = filters.value
         viewModelScope.launch {

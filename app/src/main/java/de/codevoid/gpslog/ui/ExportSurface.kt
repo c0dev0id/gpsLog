@@ -56,14 +56,14 @@ import java.util.Locale
  */
 @Composable
 internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit) {
-    val selected by vm.selected.collectAsStateWithLifecycle()
+    val target by vm.exportTarget.collectAsStateWithLifecycle()
     val runs by vm.runs.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
     val preview by vm.exportPreview.collectAsStateWithLifecycle()
     val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
-    val selectedPoints = remember(runs, selected) {
-        runs.filter { it.id in selected }.sumOf { it.pointCount }
-    }
+    val chosen = remember(runs, target) { runs.filter { it.id in target } }
+    // One run reads as that run's page; several read as a count.
+    val one = chosen.singleOrNull()
 
     // imePadding keeps the pinned Export row above the keyboard while a filter field is focused.
     Column(
@@ -82,11 +82,15 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
                 .padding(horizontal = Gutter, vertical = 8.dp),
         ) {
             Text(
-                "${f.plural(selected.size.toLong(), "run", "runs")} selected",
+                if (one != null) f.runTitle(one.startTimeMillis) else f.plural(chosen.size.toLong(), "run", "runs"),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                f.plural(selectedPoints, "raw point", "raw points"),
+                if (one != null) {
+                    f.runSubtitle(one.endTimeMillis - one.startTimeMillis, one.pointCount)
+                } else {
+                    f.plural(chosen.sumOf { it.pointCount }, "raw point", "raw points")
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),

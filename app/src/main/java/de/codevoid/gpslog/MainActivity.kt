@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
     private fun exportForShare() {
         val dir = File(cacheDir, "exports").apply { mkdirs() }
         val file = File(dir, suggestedName())
-        vm.exportSelected(file.outputStream()) {
+        vm.export(file.outputStream()) {
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = MIME_GPX
