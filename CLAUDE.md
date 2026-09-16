@@ -251,7 +251,13 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   text-only controls: Stop on the left in `errorContainer`, Pause/Resume on the
   right, one filled-primary button at a time. While logging, six
   tabular-numeral tiles in one `Panel`; while idle, the same slot holds
-  `LatestRunRow` (`runs.firstOrNull()`), whose tap opens its Export page.
+  `LatestRunRow` (`runs.firstOrNull()`), whose tap opens its Export page. In a
+  wide window a *recording* run fills the height (`BoxWithConstraints`, capped
+  at `WideContentMaxHeight`): both columns take that height as a minimum, the
+  status block centres in its column and the tiles spread `SpaceEvenly` one
+  type step larger. The minimum goes on the `Column` inside `Panel`, never on
+  the panel — `Surface` is not guaranteed to pass a minimum constraint to its
+  content.
   Recording is independent of the export filters: nothing on Record reads
   them. `recordStatus` maps a false `gpsEnabled` to *Receiver off* for an
   external source (the service initialises it internal-only and drops it on a
@@ -286,6 +292,7 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
 `Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
 `RecordingDot`, `ValueWithUnit`, `ControlLabel`, `RevealEnter`/`RevealExit`,
 `ContentMaxWidth` (600 dp), `WideWindowMinWidth`, `WideContentMaxWidth`,
+`WideContentMaxHeight`,
 `Gutter`, `ControlHeight`. The recording marker is `error`; paused is the
 neutral `outline` (words: `onSurfaceVariant`), never dynamic `tertiary`,
 which lands on red for some wallpapers. `ui/Format.kt` and
