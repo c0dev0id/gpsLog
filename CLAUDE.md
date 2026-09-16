@@ -248,16 +248,18 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
 - **Record** (`RecordSurface.kt`) — a status word from `recordStatus()` with a
   subtitle from `recordSubtitle()`; the recorded span is `lastFix − start`, so
   it advances with fixes and freezes while paused (no ticking clock). 56 dp
-  text-only controls: Stop on the left in `errorContainer`, Pause/Resume on the
-  right, one filled-primary button at a time. While logging, six
+  text-only controls: Stop on the left, outlined with `error` content like
+  Delete on the Runs tray, Pause/Resume on the right, one filled button at a
+  time. The row is capped at `WideControlsMaxWidth` in a wide window. While logging, six
   tabular-numeral tiles in one `Panel`; while idle, the same slot holds
   `LatestRunRow` (`runs.firstOrNull()`), whose tap opens its Export page. In a
   wide window a *recording* run fills the height (`BoxWithConstraints`, capped
   at `WideContentMaxHeight`): both columns take that height as a minimum, the
-  status block centres in its column and the tiles spread `SpaceEvenly` one
-  type step larger. The minimum goes on the `Column` inside `Panel`, never on
-  the panel — `Surface` is not guaranteed to pass a minimum constraint to its
-  content.
+  status block centres in its column and the tile rows sit `TileGap` apart,
+  centred. Spreading them evenly put more space between the rows than they
+  occupied, so do not go back to `SpaceEvenly`. The minimum goes on the
+  `Column` inside `Panel`, never on the panel — `Surface` is not guaranteed to
+  pass a minimum constraint to its content.
   Recording is independent of the export filters: nothing on Record reads
   them. `recordStatus` maps a false `gpsEnabled` to *Receiver off* for an
   external source (the service initialises it internal-only and drops it on a
@@ -271,7 +273,11 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   dialog; keeps the merged run selected) and Export. The active run may be
   exported but is excluded from Delete/Merge. Never swap the row modifier
   between modes — the swap would happen under a finger that is still down.
-  The list's `LazyListState` is hoisted to the shell so the Export page pushed
+  Rows are separated by a `HorizontalDivider` and carry a trailing Share glyph
+  whenever a tap would export: the container is transparent, so without both
+  the row has neither a visible bound nor an affordance. The active run's tag
+  is `overlineContent`, not trailing, where a wide window stranded it. The
+  list's `LazyListState` is hoisted to the shell so the Export page pushed
   over it does not reset the scroll position.
 - **Export** (`ExportSurface.kt`) — the page for `exportTarget`: a single run
   reads by its title, several as a count; `FilterRow`s (meaning left, 120 dp
@@ -283,8 +289,10 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   `imePadding()`; the shell's `consumeWindowInsets(padding)` makes that land
   on the keyboard rather than a bar's height above it.
 - **Settings** (`SettingsSurface.kt`) — `ListItem` rows under Recording /
-  Diagnostics / About: an inline `selectableGroup` radio list for the GPS
-  device (lazy `BLUETOOTH_CONNECT` from an "Allow" row), the debug-NMEA switch,
+  Diagnostics / About: one row naming the current GPS device, opening an
+  `AlertDialog` picker (internal plus every paired classic device, scrollable,
+  lazy `BLUETOOTH_CONNECT` from an "Allow" row inside it). The list is
+  unbounded, so it must not sit inline. The debug-NMEA switch,
   "Share latest log" (disabled with a reason while `latestDebugLog` is null),
   the version, and one updater row whose slots follow `UpdateState`.
 
@@ -292,12 +300,18 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
 `Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
 `RecordingDot`, `ValueWithUnit`, `ControlLabel`, `RevealEnter`/`RevealExit`,
 `ContentMaxWidth` (600 dp), `WideWindowMinWidth`, `WideContentMaxWidth`,
-`WideContentMaxHeight`,
+`WideContentMaxHeight`, `TileGap`, `WideControlsMaxWidth`,
 `Gutter`, `ControlHeight`. The recording marker is `error`; paused is the
 neutral `outline` (words: `onSurfaceVariant`), never dynamic `tertiary`,
 which lands on red for some wallpapers. `ui/Format.kt` and
 `ui/RecordStatus.kt` are pure Kotlin under JUnit — keep them free of Android
 imports; leaf composables take Strings and Booleans, never a `Formats`.
+
+Type stays within about a factor of two across a screen: `headlineLarge` for
+the status word, `headlineSmall` for live values, `bodyLarge` for row titles,
+`labelLarge` for the smallest labels. Do not reach for `displaySmall` or
+`labelMedium` in content again, and keep the rail's glyph and label a step
+above the bar's, since it is read from further away.
 
 `ui/Theme.kt` applies the dynamic (Material You) light/dark schemes with tabular
 figures (`tnum`) on the display/headline/title roles only; at minSdk 34 the
