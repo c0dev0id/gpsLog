@@ -1,6 +1,8 @@
 package de.codevoid.gpslog.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,11 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -24,9 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,7 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,11 +47,12 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * The past runs, newest first, with checkbox multiselect (the whole row toggles). Delete and
- * Merge act on the selection from a tray below the list; the active run may be selected for
- * export but is excluded from both while its file is being written. Collects
- * [MainViewModel.activeRun] rather than the logging state, so point ticks never reach this
- * surface; the active row shows the disk-derived count like every other row.
+ * The past runs, newest first, following the platform list idiom: a tap opens the run's Export
+ * page, a long-press selects it and starts selection mode (checkboxes appear, the header turns into
+ * a count with Close, Back leaves the mode), and the tray below acts on the selection with Delete,
+ * Merge and Export. The active run may be exported but is excluded from Delete and Merge while its
+ * file is being written. Collects [MainViewModel.activeRun] rather than the logging state, so point
+ * ticks never reach this surface; the active row shows the disk-derived count like every other row.
  */
 @Composable
 internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
@@ -57,19 +63,26 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
 
     val activeId = active?.id
     val activePaused = active?.paused == true
+    // Selection mode is derived, not a flag: it is on exactly while something is selected.
+    val selecting = selected.isNotEmpty()
     val actionable = selected.count { it != activeId }
     val summary = remember(runs) { f.runsSummary(runs.size, runs.sumOf { it.pointCount }) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
-    // The tray keeps its last count while it shrinks away instead of flashing "Delete (0)".
-    var lastActionable by remember { mutableIntStateOf(0) }
-    LaunchedEffect(actionable) {
-        if (actionable > 0) lastActionable = actionable
-    }
-    val trayCount = if (actionable > 0) actionable else lastActionable
+
+    BackHandler(enabled = selecting) { vm.clearSelection() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SurfaceHeader("Runs") {
-            if (selected.isEmpty()) {
+        if (selecting) {
+            SurfaceHeader(
+                title = "${selected.size} selected",
+                leading = {
+                    IconButton(onClick = vm::clearSelection) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear selection")
+                    }
+                },
+            )
+        } else {
+            SurfaceHeader("Runs") {
                 // The empty state below already says there are no runs.
                 if (runs.isNotEmpty()) {
                     Text(
@@ -78,13 +91,6 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            } else {
-                Text(
-                    "${selected.size} selected",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                TextButton(onClick = vm::clearSelection) { Text("Clear") }
             }
         }
         if (runs.isEmpty()) {
@@ -102,23 +108,26 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
                     RunRow(
                         title = f.runTitle(run.startTimeMillis),
                         subtitle = f.runSubtitle(run.endTimeMillis - run.startTimeMillis, run.pointCount),
-                        selected = run.id in selected,
+                        selecting = selecting,
+                        isSelected = run.id in selected,
                         active = run.id == activeId,
                         activePaused = activePaused,
                         onToggle = { vm.toggleSelect(run.id) },
+                        onExport = { vm.openExport(setOf(run.id)) },
                     )
                 }
             }
         }
         AnimatedVisibility(
-            visible = actionable > 0,
+            visible = selecting,
             enter = RevealEnter,
             exit = RevealExit,
         ) {
             SelectionTray(
-                actionable = trayCount,
+                actionable = actionable,
                 onDelete = { confirmDelete = true },
                 onMerge = vm::mergeSelected,
+                onExport = { vm.openExport(selected) },
             )
         }
     }
@@ -136,28 +145,45 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
     }
 }
 
-/** A stock two-line list row; the checkbox is the row's own semantics, not a second target. */
+/**
+ * A stock two-line list row. One `combinedClickable` in both modes — its lambdas branch on
+ * [selecting] — so the modifier is never swapped under a finger that is still down; the checkbox
+ * exists only in selection mode and mirrors the row, it is not a second target.
+ */
 @Composable
 private fun RunRow(
     title: String,
     subtitle: String,
-    selected: Boolean,
+    selecting: Boolean,
+    isSelected: Boolean,
     active: Boolean,
     activePaused: Boolean,
     onToggle: () -> Unit,
+    onExport: () -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        modifier = Modifier.toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() }),
+        modifier = Modifier
+            .semantics { selected = isSelected }
+            .combinedClickable(
+                onClickLabel = if (selecting) null else "Export",
+                onLongClickLabel = "Select",
+                onLongClick = onToggle,
+                onClick = { if (selecting) onToggle() else onExport() },
+            ),
         supportingContent = { Text(subtitle) },
-        leadingContent = { Checkbox(checked = selected, onCheckedChange = null) },
+        leadingContent = if (selecting) {
+            { Checkbox(checked = isSelected, onCheckedChange = null) }
+        } else {
+            null
+        },
         trailingContent = if (active) {
             { ActiveTag(paused = activePaused) }
         } else {
             null
         },
         colors = ListItemDefaults.colors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+            containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
         ),
     )
 }
@@ -175,28 +201,44 @@ private fun ActiveTag(paused: Boolean) {
     }
 }
 
-/** Destructive verb on the left, away from the right thumb. Merge is lossless, so it asks nothing. */
+/**
+ * Destructive verb on the left, away from the right thumb; Export, the common verb, under it.
+ * Merge is lossless, so it asks nothing. The header carries the count, so the labels do not; the
+ * text-button padding is what lets three labels share a 360 dp phone.
+ */
 @Composable
-private fun SelectionTray(actionable: Int, onDelete: () -> Unit, onMerge: () -> Unit) {
+private fun SelectionTray(actionable: Int, onDelete: () -> Unit, onMerge: () -> Unit, onExport: () -> Unit) {
+    val padding = ButtonDefaults.TextButtonContentPadding
     ActionTray {
         OutlinedButton(
             onClick = onDelete,
             enabled = actionable >= 1,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            contentPadding = padding,
             modifier = Modifier
                 .weight(1f)
                 .height(ControlHeight),
         ) {
-            ControlLabel("Delete ($actionable)")
+            ControlLabel("Delete")
         }
         FilledTonalButton(
             onClick = onMerge,
             enabled = actionable >= 2,
+            contentPadding = padding,
             modifier = Modifier
                 .weight(1f)
                 .height(ControlHeight),
         ) {
-            ControlLabel("Merge ($actionable)")
+            ControlLabel("Merge")
+        }
+        Button(
+            onClick = onExport,
+            contentPadding = padding,
+            modifier = Modifier
+                .weight(1f)
+                .height(ControlHeight),
+        ) {
+            ControlLabel("Export")
         }
     }
 }
