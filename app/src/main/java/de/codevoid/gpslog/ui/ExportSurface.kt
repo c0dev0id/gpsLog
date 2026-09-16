@@ -1,5 +1,6 @@
 package de.codevoid.gpslog.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,10 +19,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -49,10 +52,11 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * The selection's export: a summary, the accuracy/distance/time filters, a live preview of the
- * filtered result and one Export action that hands the GPX to the system share sheet (saving to
- * disk is sharing to a file manager). Only reachable with a selection; the navigation gates it.
- * In a wide window the filters sit beside the result.
+ * The Export page for the runs in [MainViewModel.exportTarget]: what is being exported, the
+ * accuracy/distance/time filters (they act only here — recording always logs every raw fix), a
+ * live preview of the filtered result and one Share action that hands the GPX to the system share
+ * sheet (saving to disk is sharing to a file manager). Pushed over the destination that opened it;
+ * Back or the arrow returns there. In a wide window the filters sit beside the result.
  */
 @Composable
 internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit) {
@@ -65,13 +69,22 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
     // One run reads as that run's page; several read as a count.
     val one = chosen.singleOrNull()
 
-    // imePadding keeps the pinned Export row above the keyboard while a filter field is focused.
+    BackHandler { vm.closeExport() }
+
+    // imePadding keeps the pinned Share row above the keyboard while a filter field is focused.
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
-        SurfaceHeader("Export")
+        SurfaceHeader(
+            title = "Export",
+            leading = {
+                IconButton(onClick = vm::closeExport) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            },
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -113,17 +126,18 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
                 ResultPanel(preview = preview, f = f)
             }
         }
+        // Never disabled: the export runs the filter itself and does not read the preview, and the
+        // panel already names a zero-point result.
         ActionTray {
             Button(
                 onClick = onShare,
-                enabled = preview is ExportPreview.Ready,
                 modifier = Modifier
                     .weight(1f)
                     .height(ControlHeight),
             ) {
                 Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(modifier = Modifier.size(ButtonDefaults.IconSpacing))
-                ControlLabel("Export GPX")
+                ControlLabel("Share GPX")
             }
         }
     }
