@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,7 +34,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -172,6 +177,7 @@ private fun <T : Any> FilterRow(
 ) {
     var text by remember(value) { mutableStateOf(format(value)) }
     val valid = parse(text) != null
+    val focusManager = LocalFocusManager.current
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -193,19 +199,22 @@ private fun <T : Any> FilterRow(
             },
             modifier = Modifier
                 .width(120.dp)
+                .semantics { contentDescription = name }
                 .onFocusChanged { if (!it.isFocused) text = format(value) },
             singleLine = true,
             isError = !valid,
             suffix = { Text(unit) },
             textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            // Done only hides the keyboard by default; dropping focus is what triggers the snap-back.
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
         )
     }
 }
 
 /**
- * The filtered result. While a recompute runs the last result stays visible and dims, so a
- * keystroke never flashes dashes; the panel keeps a minimum height so nothing below it moves.
+ * The filtered result. While a recompute runs the last result stays visible and dims as a whole,
+ * so a keystroke never flashes dashes; the panel keeps a minimum height so nothing below it moves.
  */
 @Composable
 private fun ResultPanel(preview: ExportPreview, f: Formats) {
@@ -214,34 +223,32 @@ private fun ResultPanel(preview: ExportPreview, f: Formats) {
         if (preview is ExportPreview.Ready) lastReady = preview
     }
     val shown = preview as? ExportPreview.Ready ?: lastReady
-    val alpha = if (preview is ExportPreview.Ready) 1f else 0.38f
 
     Panel(modifier = Modifier.defaultMinSize(minHeight = 96.dp)) {
         if (shown == null) {
-            Text(DASH, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.outlineVariant)
+            Text(DASH, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.outline)
         } else {
-            val none = shown.keptPoints == 0L
-            ValueWithUnit(
-                value = f.count(shown.keptPoints),
-                unit = if (shown.keptPoints == 1L) "point" else "points",
-                valueStyle = MaterialTheme.typography.headlineLarge,
-                valueColor = (if (none) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-                    .copy(alpha = alpha),
-            )
-            if (none) {
-                Text(
-                    "Every point is filtered out — raise the accuracy limit",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error.copy(alpha = alpha),
-                    modifier = Modifier.padding(top = 4.dp),
+            val empty = shown.totalPoints == 0L
+            val none = !empty && shown.keptPoints == 0L
+            Column(modifier = Modifier.alpha(if (preview is ExportPreview.Ready) 1f else 0.6f)) {
+                ValueWithUnit(
+                    value = f.count(shown.keptPoints),
+                    unit = if (shown.keptPoints == 1L) "point" else "points",
+                    valueStyle = MaterialTheme.typography.headlineLarge,
+                    valueColor = if (none) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
-            } else {
-                Text(
-                    "of ${f.count(shown.totalPoints)} · " +
+                val (detail, detailColor) = when {
+                    empty -> "The selected runs have no points" to MaterialTheme.colorScheme.onSurfaceVariant
+                    none -> "Every point is filtered out — raise the accuracy limit" to MaterialTheme.colorScheme.error
+                    else -> "of ${f.count(shown.totalPoints)} · " +
                         "${f.plural(shown.tracks.toLong(), "track", "tracks")} · " +
-                        "${reductionPercent(shown.totalPoints, shown.keptPoints)}% fewer",
+                        "${reductionPercent(shown.totalPoints, shown.keptPoints)}% fewer" to
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Text(
+                    detail,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    color = detailColor,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
