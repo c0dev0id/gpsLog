@@ -225,11 +225,16 @@ BluetoothNmea ───┘            │
 ### UI
 
 One screen, four top-level surfaces behind a Material 3 `NavigationBar` (a
-`rememberSaveable` index and a `when` — no `navigation-compose`). There is no
-app bar: Runs, Export and Settings open with a `SurfaceHeader`, Record's status
-hero is its header. The shell (`ui/GpsLogScreen.kt`) collects only `activeRun`
-and `selected`; each surface lives in its own file and collects its own flows,
-so a 2 s `LoggingState` tick recomposes `RecordSurface` alone.
+`rememberSaveable` index and a `when` — no `navigation-compose`), or a
+`NavigationRail` on the start side once the window is 600 dp or wider
+(`WideWindowMinWidth`, read from `LocalWindowInfo.current.containerDpSize` —
+no window-size-class library). The shell passes `wide` to Record and Export,
+which then lay out in two columns capped at `WideContentMaxWidth` (840 dp).
+There is no app bar: Runs, Export and Settings open with a `SurfaceHeader`,
+Record's status hero is its header. The shell (`ui/GpsLogScreen.kt`) collects
+only `activeRun` and `selected`; each surface lives in its own file and
+collects its own flows, so a 2 s `LoggingState` tick recomposes
+`RecordSurface` alone.
 
 - **Record** (`RecordSurface.kt`) — a status word from `recordStatus()` with a
   subtitle from `recordSubtitle()`; the recorded span is `lastFix − start`, so
