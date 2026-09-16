@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **gpsLog** — an Android GPS logging service (package `de.codevoid.gpslog`). A
 foreground service records fixes from either the internal chipset or an external
-Bluetooth NMEA receiver into per-run binary files; a four-tab Compose screen
-records, manages runs, exports GPX and holds settings. It has not yet been
-exercised on a real device.
+Bluetooth NMEA receiver into per-run binary files; one Compose screen with
+three destinations (Record, Runs, Settings) and an Export page records,
+manages runs, exports GPX and holds settings. It runs on the owner's devices;
+there is no emulator and no instrumentation test setup.
 
 The user is a minimalist: prefer the platform API over a library, and a
 structural fix over a local workaround. Keep code KISS and testable.
@@ -84,7 +85,7 @@ key as the installed build.
   start without it, so the failure is named instead of silent.
 - **No Room, no DataStore, no DI framework, no XML layouts, no navigation
   component, no XML/JSON/HTTP library.** Single `MainActivity`, one Compose
-  screen with `PrimaryTabRow` tabs, an `Application`-scoped singleton (`App`)
+  screen behind a `NavigationBar`/`NavigationRail`, an `Application`-scoped singleton (`App`)
   for wiring, `android.util.Xml` for GPX and `HttpURLConnection` + `org.json`
   for the updater.
 - **Pre-1.0: no schema or migration code.** Readers tolerate a torn trailing
@@ -319,9 +320,9 @@ reboot gap is not drawn as a straight line). The ViewModel runs the export on
 (the SAF save path was removed — sharing to a file manager already writes to
 disk).
 
-`MainViewModel.exportPreview` is `combine(selected, filters, runs)` →
+`MainViewModel.exportPreview` is `combine(exportTarget, filters, runs)` →
 `transformLatest`, so a filter change mid-read cancels the stale computation. It
-re-reads every selected run from disk on each change rather than caching points —
+re-reads every targeted run from disk on each change rather than caching points —
 KISS over memory, and cheap because reads are fast and cancellable.
 
 ### Updater
