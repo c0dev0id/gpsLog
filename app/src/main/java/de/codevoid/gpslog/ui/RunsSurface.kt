@@ -1,10 +1,6 @@
 package de.codevoid.gpslog.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,7 +24,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,6 +60,12 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
     val actionable = selected.count { it != activeId }
     val summary = remember(runs) { f.runsSummary(runs.size, runs.sumOf { it.pointCount }) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    // The tray keeps its last count while it shrinks away instead of flashing "Delete (0)".
+    var lastActionable by remember { mutableIntStateOf(0) }
+    LaunchedEffect(actionable) {
+        if (actionable > 0) lastActionable = actionable
+    }
+    val trayCount = if (actionable > 0) actionable else lastActionable
 
     Column(modifier = Modifier.fillMaxSize()) {
         SurfaceHeader("Runs") {
@@ -105,11 +109,11 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
         }
         AnimatedVisibility(
             visible = actionable > 0,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
+            enter = RevealEnter,
+            exit = RevealExit,
         ) {
             SelectionTray(
-                actionable = actionable,
+                actionable = trayCount,
                 onDelete = { confirmDelete = true },
                 onMerge = vm::mergeSelected,
             )

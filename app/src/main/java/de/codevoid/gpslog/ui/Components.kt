@@ -1,5 +1,11 @@
 package de.codevoid.gpslog.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +40,13 @@ internal val Gutter = 16.dp
 
 /** Height of the primary verb buttons (Start/Stop/Pause, Delete/Merge, Export). */
 internal val ControlHeight = 56.dp
+
+/**
+ * The one reveal in the app (precise-location banner, selection tray). Built once: a transition
+ * holds lambdas, so one built inline would differ on every recomposition and defeat skipping.
+ */
+internal val RevealEnter: EnterTransition = expandVertically() + fadeIn()
+internal val RevealExit: ExitTransition = shrinkVertically() + fadeOut()
 
 /** Label of a [ControlHeight] button: one step up from the button default so it reads at 56 dp. */
 @Composable
