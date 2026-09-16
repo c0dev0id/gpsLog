@@ -246,8 +246,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (ids.size < 2) return
         viewModelScope.launch {
             val merged = withContext(Dispatchers.IO) { repo.merge(ids.toList()) }
-            // The merged run stays selected: merge-then-export is the reason to merge.
-            _selected.value = setOfNotNull(merged)
+            // Only the merged originals leave the selection and the result joins it (merge-then-
+            // export is the reason to merge); a selected active run stays, and nothing changes if
+            // nothing was merged.
+            _selected.update { it - ids + setOfNotNull(merged) }
             refreshRuns()
         }
     }
