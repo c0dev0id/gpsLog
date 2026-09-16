@@ -265,8 +265,10 @@ so a 2 s `LoggingState` tick recomposes `RecordSurface` alone.
 
 `ui/Components.kt` holds the shared pieces: `SurfaceHeader`, `SectionHeader`,
 `Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
-`RecordingDot`, `ValueWithUnit`, `ControlLabel`, `ContentMaxWidth` (600 dp),
-`Gutter`, `ControlHeight`. `ui/Format.kt` and `ui/RecordStatus.kt` are pure
+`RecordingDot`, `ValueWithUnit`, `ControlLabel`, `RevealEnter`/`RevealExit`,
+`ContentMaxWidth` (600 dp), `Gutter`, `ControlHeight`. The recording marker
+is `error`; paused is the neutral `outline` (words: `onSurfaceVariant`), never
+dynamic `tertiary`, which lands on red for some wallpapers. `ui/Format.kt` and `ui/RecordStatus.kt` are pure
 Kotlin under JUnit — keep them free of Android imports; leaf composables take
 Strings and Booleans, never a `Formats`.
 
