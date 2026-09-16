@@ -172,13 +172,13 @@ class LoggingService : Service(), FixSink {
     private fun isInternalSource(): Boolean = settings.recordingSource.value.isEmpty()
 
     /**
-     * Whether the internal provider is switched on — false as well when the device has no GPS
-     * chipset. `isProviderEnabled` is only specified for a provider that exists, so presence is
-     * asked first rather than relying on it to answer false for a provider it never heard of.
+     * Whether the internal provider is switched on. Its documented return is "true if the provider
+     * exists and is enabled", so a device with no chipset reads as off here too — which is all this
+     * value is for. Telling *absent* from *switched off* is `hasProvider`'s job, and the two are
+     * different words to the user, so do not collapse them.
      */
     private fun internalGpsEnabled(): Boolean =
-        locationManager.hasProvider(LocationManager.GPS_PROVIDER) &&
-            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
 
     /**
      * Acquires the configured fix source. Returns false when it cannot be started (permission
@@ -215,10 +215,16 @@ class LoggingService : Service(), FixSink {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER, 0L, 0f, listener, handlerThread.looper,
                 )
-                if (!locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)) {
-                    Log.w(TAG, "GnssStatus callback not registered; satellite info unavailable")
-                }
+                // Documented to return true always — registration is client-side, and with no
+                // GNSS engine the server side is a no-op — so it is not an availability check.
+                locationManager.registerGnssStatusCallback(handlerExecutor, gnssCallback)
             } catch (e: SecurityException) {
+                Log.w(TAG, "location updates refused", e)
+                return false
+            } catch (e: IllegalArgumentException) {
+                // hasProvider above and this call are separate round trips to the system server,
+                // so the provider can still go away in between. Refusing beats dying.
+                Log.w(TAG, "GPS provider gone since it was checked; refusing to log", e)
                 return false
             }
             // Debug: dump the chipset's identity/capabilities and tee its NMEA, at the fix rate the
