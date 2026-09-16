@@ -83,9 +83,11 @@ key as the installed build.
   `IllegalArgumentException` for a provider that does not exist — on the `gps-logger`
   thread, which took the process with it. `LocationManager.hasProvider` is the presence
   question, asked in `LoggingService.startSource` (refuse) and once in
-  `MainViewModel.hasInternalGps` (a `val`: hardware cannot appear mid-process). Such a
-  device records from an external Bluetooth receiver like any other. `uses-feature
-  android.hardware.location.gps` is therefore `required="false"`.
+  `MainViewModel.hasInternalGps` (a `val`: only a mock-location app can add or remove a
+  provider, and there is no presence broadcast — the service's own re-check is the
+  guarantee, not the `val`). Such a device records from an external Bluetooth receiver
+  like any other. `uses-feature android.hardware.location.gps` is therefore
+  `required="false"`.
 - **Precise location is mandatory.** A coarse-only app may still request
   `GPS_PROVIDER` without throwing, but fixes are fuzzed and throttled to one per
   10 minutes and `GnssStatus` never fires. `MainActivity` checks
@@ -115,9 +117,13 @@ HandlerThread** — that is what keeps the writer and its counters single-thread
 
 - *Internal*: `LocationListener` + `GnssStatus.Callback` registered on that
   thread's `Looper`/`Executor`. Needs `ACCESS_FINE_LOCATION` and a `GPS_PROVIDER` that
-  exists (`hasProvider`). `isProviderEnabled` is only specified for a provider that
-  exists, so both of its call sites go through `internalGpsEnabled()`, which asks
-  presence first.
+  exists (`hasProvider`); the check and the request are separate round trips to the
+  system server, so the `IllegalArgumentException` is caught as well — no pre-check can
+  close that on its own. `isProviderEnabled` answers false for a missing provider by
+  contract ("true if the provider exists and is enabled"), so `internalGpsEnabled()` is
+  that one call; `hasProvider` is what tells *absent* from *switched off*, which are
+  different words to the user. `registerGnssStatusCallback` returns true always — it is
+  not an availability probe, and with no GNSS engine the server side is a no-op.
 - *External*: `service/BluetoothNmeaSource` opens an RFCOMM socket on the SPP
   UUID and reads it on its **own** `gps-bt-reader` thread — a blocking socket
   read must never sit on `gps-logger` and starve the flush and notification
@@ -151,6 +157,15 @@ even while no `Location` arrives and needs no staleness timer.
 | `ACTION_RESUME` / null intent (sticky restart) | Re-open the persisted active run in append mode; if none, `stopSelf()` |
 | `ACTION_PAUSE` / `ACTION_UNPAUSE` | Release / re-acquire the fix source (see **Pause is cold** below); also sent by the notification actions |
 | `ACTION_STOP` | Flush, clear the active-run marker, `stopForeground` + `stopSelf` |
+
+**A platform refusal is never a crash.** `startForeground` with the `location`
+type throws when the app holds neither `ACCESS_COARSE_LOCATION` nor
+`ACCESS_FINE_LOCATION`, and a *background* start — `BootReceiver`, a sticky
+restart — additionally needs `ACCESS_BACKGROUND_LOCATION`, because that policy
+is while-in-use only. `Service.startForeground` swallows only `RemoteException`,
+so a refusal reached `onStartCommand` on the main thread and killed the process
+— at every boot, since only Stop clears the marker. It is caught; the marker is
+cleared only for a run that never began, so an interrupted one stays resumable.
 
 `service/BootReceiver` sends `ACTION_RESUME` after `BOOT_COMPLETED` if an
 active run is persisted. Only the user's Stop clears the marker; a process

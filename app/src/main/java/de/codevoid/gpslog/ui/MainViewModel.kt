@@ -96,8 +96,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Whether this device has a GNSS chipset at all. A Wi-Fi-only tablet has no `GPS_PROVIDER`,
-     * so only an external Bluetooth receiver can record on it. Read once: hardware does not
-     * appear while the process lives, so this is a fact, not a flow.
+     * so only an external Bluetooth receiver can record on it. Read once: real providers are
+     * registered at boot and only a mock-location app can add or remove one, and there is no
+     * broadcast for presence anyway — so a flow would be ceremony. This is the UI affordance,
+     * not the guarantee: the service asks again on its own thread before it registers anything.
      */
     val hasInternalGps: Boolean =
         app.getSystemService(LocationManager::class.java).hasProvider(LocationManager.GPS_PROVIDER)
