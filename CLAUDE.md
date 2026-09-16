@@ -216,7 +216,10 @@ BluetoothNmea ───┘            │
   `loggingState.runId` flips. Selection is ephemeral ViewModel state.
 - `MainViewModel.activeRun` reduces `LoggingState` to `ActiveRun(id, paused)?`
   for the shell and the Runs list, so point ticks recompose only the Record
-  surface.
+  surface. `exportTarget` is the set of runs the Export page is open for
+  (empty = closed), kept apart from `selected`; `exportPreview` and `export()`
+  read it. It is deliberately not saved across process death.
+- The notification offers Pause/Resume and, always, Stop (`ACTION_STOP`).
 - `MainActivity` owns everything that needs an Activity: the up-front permission
   chain (location → background location → battery-optimization exemption), the
   `uiVisible` flag, and the `FileProvider`-backed share and install intents over
@@ -224,44 +227,52 @@ BluetoothNmea ───┘            │
 
 ### UI
 
-One screen, four top-level surfaces behind a Material 3 `NavigationBar` (a
-`rememberSaveable` index and a `when` — no `navigation-compose`), or a
-`NavigationRail` on the start side once the window is 600 dp or wider
-(`WideWindowMinWidth`, read from `LocalWindowInfo.current.containerDpSize` —
-no window-size-class library). The shell passes `wide` to Record and Export,
-which then lay out in two columns capped at `WideContentMaxWidth` (840 dp).
-There is no app bar: Runs, Export and Settings open with a `SurfaceHeader`,
-Record's status hero is its header. The shell (`ui/GpsLogScreen.kt`) collects
-only `activeRun` and `selected`; each surface lives in its own file and
+One screen, three always-reachable destinations — Record, Runs, Settings —
+behind a Material 3 `NavigationBar` (a `rememberSaveable` index and a `when`
+— no `navigation-compose`), or a `NavigationRail` on the start side once the
+window is 600 dp or wider (`WideWindowMinWidth`, read from
+`LocalWindowInfo.current.containerDpSize` — no window-size-class library).
+**Export is a page, not a destination**: it is composed in the content slot
+while `MainViewModel.exportTarget` (the set of run ids it is open for) is
+non-empty, opened by `openExport(ids)` from the latest-run row on Record, a
+tap on a Runs row, or the Runs tray, and closed by `BackHandler`, its own
+back arrow or any navigation item (`closeExport()` before switching). There
+is no app bar: surfaces open with a `SurfaceHeader` (optional leading icon
+slot for Back/Close). The shell (`ui/GpsLogScreen.kt`) collects only
+`activeRun` and `exportTarget`; each surface lives in its own file and
 collects its own flows, so a 2 s `LoggingState` tick recomposes
-`RecordSurface` alone.
+`RecordSurface` alone. The shell passes `wide` to Record and Export, which
+lay out in two columns capped at `WideContentMaxWidth` (840 dp).
 
 - **Record** (`RecordSurface.kt`) — a status word from `recordStatus()` with a
   subtitle from `recordSubtitle()`; the recorded span is `lastFix − start`, so
   it advances with fixes and freezes while paused (no ticking clock). 56 dp
   text-only controls: Stop on the left in `errorContainer`, Pause/Resume on the
-  right, one filled-primary button at a time. Six tabular-numeral tiles in one
-  `Panel` stay mounted while idle showing `—`. Recording is independent of the
-  export filters: nothing on Record reads them. `recordStatus` maps a false
-  `gpsEnabled` to *Receiver off* for an external source (the service
-  initialises it internal-only and drops it on a Bluetooth disconnect) and to
-  *GPS disabled* for the internal one.
-- **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows (`toggleable`
-  whole row, leading `Checkbox`, `secondaryContainer` when selected, a
-  dot-and-word tag on the active run), a header summary or `n selected · Clear`,
-  and an `ActionTray` with Delete (confirmed by an `AlertDialog` — the one
-  irreversible action) and Merge (no dialog). The active run may be selected for
-  export but is excluded from both.
-- **Export** (`ExportSurface.kt`) — the navigation item is `enabled` only with a
-  selection and carries the count as a `Badge`; a `LaunchedEffect` falls back to
-  Runs if the saved index restores to Export with an empty selection. Filters
-  are `FilterRow`s (meaning left, 120 dp field with a `suffix` unit right): the
-  pure parsers commit valid input immediately, invalid input flags the field and
-  snaps back on focus loss; Time stays enabled and its helper says it is
-  ignored while a distance is set. The result panel dims the last `Ready` value
-  while `Computing`. The root has `imePadding()`; the shell's
-  `consumeWindowInsets(padding)` is what makes that land on the keyboard rather
-  than a bar's height above it.
+  right, one filled-primary button at a time. While logging, six
+  tabular-numeral tiles in one `Panel`; while idle, the same slot holds
+  `LatestRunRow` (`runs.firstOrNull()`), whose tap opens its Export page.
+  Recording is independent of the export filters: nothing on Record reads
+  them. `recordStatus` maps a false `gpsEnabled` to *Receiver off* for an
+  external source (the service initialises it internal-only and drops it on a
+  Bluetooth disconnect) and to *GPS disabled* for the internal one.
+- **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows with ONE
+  `combinedClickable` in both modes: tap opens the run's Export page, long-press
+  toggles selection; selection mode is derived (`selected.isNotEmpty()`), shows
+  the leading `Checkbox`, a `"<n> selected"` header with a Close icon, a
+  `BackHandler` that clears the selection, and an `ActionTray` with Delete
+  (confirmed by an `AlertDialog` — the one irreversible action), Merge (no
+  dialog; keeps the merged run selected) and Export. The active run may be
+  exported but is excluded from Delete/Merge. Never swap the row modifier
+  between modes — the swap would happen under a finger that is still down.
+- **Export** (`ExportSurface.kt`) — the page for `exportTarget`: a single run
+  reads by its title, several as a count; `FilterRow`s (meaning left, 120 dp
+  field with a `suffix` unit right; the pure parsers commit valid input
+  immediately, invalid input flags the field and snaps back on focus loss or
+  Done; Time stays enabled with a helper while a distance is set); the result
+  panel dims the last `Ready` value while `Computing`; Share GPX is never
+  disabled (`export()` filters the points itself). The root has
+  `imePadding()`; the shell's `consumeWindowInsets(padding)` makes that land
+  on the keyboard rather than a bar's height above it.
 - **Settings** (`SettingsSurface.kt`) — `ListItem` rows under Recording /
   Diagnostics / About: an inline `selectableGroup` radio list for the GPS
   device (lazy `BLUETOOTH_CONNECT` from an "Allow" row), the debug-NMEA switch,
@@ -271,11 +282,12 @@ collects its own flows, so a 2 s `LoggingState` tick recomposes
 `ui/Components.kt` holds the shared pieces: `SurfaceHeader`, `SectionHeader`,
 `Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
 `RecordingDot`, `ValueWithUnit`, `ControlLabel`, `RevealEnter`/`RevealExit`,
-`ContentMaxWidth` (600 dp), `Gutter`, `ControlHeight`. The recording marker
-is `error`; paused is the neutral `outline` (words: `onSurfaceVariant`), never
-dynamic `tertiary`, which lands on red for some wallpapers. `ui/Format.kt` and `ui/RecordStatus.kt` are pure
-Kotlin under JUnit — keep them free of Android imports; leaf composables take
-Strings and Booleans, never a `Formats`.
+`ContentMaxWidth` (600 dp), `WideWindowMinWidth`, `WideContentMaxWidth`,
+`Gutter`, `ControlHeight`. The recording marker is `error`; paused is the
+neutral `outline` (words: `onSurfaceVariant`), never dynamic `tertiary`,
+which lands on red for some wallpapers. `ui/Format.kt` and
+`ui/RecordStatus.kt` are pure Kotlin under JUnit — keep them free of Android
+imports; leaf composables take Strings and Booleans, never a `Formats`.
 
 `ui/Theme.kt` applies the dynamic (Material You) light/dark schemes with tabular
 figures (`tnum`) on the display/headline/title roles only; at minSdk 34 the
@@ -283,10 +295,11 @@ schemes are always available, so there is no fallback palette.
 `res/values-night/themes.xml` makes the first frame dark. The UI carries no
 experimental Material opt-in — do not reintroduce `MaterialExpressiveTheme`
 (spring motion is wrong for a still recording screen, and its motion-scheme
-factories are internal in material3 1.4.0) or `material-icons-extended` (the
-core set covers every icon; Stop and Pause are text buttons by design).
-`material-icons-core` is an explicit, BOM-managed dependency — material3 does
-not put it on the compile classpath. Motion
+factories are internal in material3 1.4.0), `ModalBottomSheet` (experimental,
+and three IME fields plus a preview do not fit a half sheet) or
+`material-icons-extended` (the core set covers every icon; Stop and Pause are
+text buttons by design). `material-icons-core` is an explicit, BOM-managed
+dependency — material3 does not put it on the compile classpath. Motion
 budget: two `AnimatedVisibility` transitions (precise-location banner, selection
 tray) plus component-internal animation — no perpetual animation, no
 destination transitions, no elapsed-time ticker.

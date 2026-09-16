@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Stop as a notification action beside Pause/Resume, so a run can be ended from the shade without opening the app
 - Delete asks for confirmation before removing runs; Merge, which loses nothing, does not
 - "Share latest log" on Settings shows when the log was captured and is disabled with a note while no log exists
-- A Clear action in the Runs header drops a multi-row selection at once
+- Close (or Back) in the Runs header drops a multi-row selection at once
 - Pause/Resume, on the Record tab and as a notification action: pausing releases the GPS receiver (or the Bluetooth link) outright, so a paused run draws no battery rather than nearly as much as a recording one, and it stays paused across a reboot or a process kill. Resuming re-acquires the receiver, which is quick because the GPS ephemeris is still cached. The timestamp gap produces a new track segment on export automatically. The Record item's dot turns grey while paused (red while actively recording), the live stats read "Paused", and the notification shows the point count.
 
 ### Fixed
@@ -20,7 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A run paused before a reboot or a process kill no longer comes back recording — it comes back paused, with the receiver still released
 
 ### Changed
-- Redesigned the screen around a bottom navigation bar: Record, Runs, Export and Settings are destinations with icons; the Record item carries a recording dot (red while recording, grey while paused), the Export item carries the selection count as a badge and is disabled while nothing is selected; the app bar title is gone and every surface starts with its own header
+- Redesigned the screen around a bottom navigation bar with three destinations, Record, Runs and Settings; the Record item carries a recording dot (red while recording, grey while paused); the app bar title is gone and every surface starts with its own header
+- Export is no longer a destination that waits for a selection: it is a page opened for the runs you choose — tap the latest run on Record, tap any run on Runs, or select several and press Export — and left with Back or its arrow. Sharing the run you just recorded is Stop, tap the latest run, Share GPX
+- Record shows the latest run in place of the idle tiles, one tap from its Export page; the live tiles appear while recording
+- Runs follows the platform list pattern: tap a run to export it, long-press to select it; selection mode shows checkboxes, a count with Close, and a tray with Delete, Merge and Export, and Back leaves it. Checkboxes are no longer shown on every row all the time
+- Merge keeps the merged run selected, so it can be exported right away
+- Share GPX is always enabled; the result panel still reports an empty result
 - Record leads with the GPS state as a headline word (Ready, Searching, Fix, Paused, Receiver off, GPS disabled, Unavailable) with the start time and the recorded span underneath, and shows the live values as a grid of tiles with tabular numerals so they no longer jitter; Stop and Pause/Resume are large side-by-side buttons
 - Runs are two-line list rows with the date and time, duration and point count, tinted when selected, with a "Recording"/"Paused" tag on the active run; the header shows a summary of all runs or the selection count
 - Export filters are rows that say what they do, with the unit inside the field; an invalid entry is flagged with the valid range and snaps back to the value in effect when the field loses focus; the Time filter says it is ignored while a distance is set instead of being disabled; the result keeps the last figures dimmed while recomputing instead of showing "Calculating…", and names the fix when every point is filtered out; the Export button stays above the keyboard
