@@ -1,10 +1,12 @@
 package de.codevoid.gpslog.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,11 +16,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,17 +45,21 @@ import java.util.Locale
 
 /**
  * Start/stop/pause and the live state. A status word leads, so "is it recording and does it have
- * a fix" reads at arm's length; six tabular-numeral tiles carry the details and stay mounted while
- * idle (every value is a dash) so nothing jumps on Start. In a wide window the status and controls
- * sit beside the tiles instead of above them, so a phone in landscape shows everything at once.
- * This is the only surface that collects [MainViewModel.loggingState]; its children take Strings
- * and Booleans, so a 2 s tick recomposes only the tiles whose text changed.
+ * a fix" reads at arm's length; while logging, six tabular-numeral tiles carry the details, and
+ * while idle the same slot holds the latest run with a Share glyph — the on-ramp to its Export
+ * page, so a finished run is one tap from being shared. The controls sit above the slot in both
+ * layouts, so swapping its content moves nothing under the finger. In a wide window the status and
+ * controls sit beside the slot instead of above it. This is the only surface that collects
+ * [MainViewModel.loggingState]; its children take Strings and Booleans, so a 2 s tick recomposes
+ * only the tiles whose text changed.
  */
 @Composable
 internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () -> Unit) {
     val state by vm.loggingState.collectAsStateWithLifecycle()
     val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
+    // Emits only on a refresh (resume, delete/merge, a run starting or ending), never on a fix.
+    val runs by vm.runs.collectAsStateWithLifecycle()
     val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
 
     val external = recordingSource.isNotEmpty()
@@ -73,17 +83,29 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
             modifier = modifier,
         )
     }
-    val stats: @Composable (Modifier) -> Unit = { modifier ->
-        StatsGrid(
-            satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
-            satellitesVisible = state.satellitesVisible.toString(),
-            accuracy = if (live) f.decimal(state.accuracyMeters) else DASH,
-            points = if (state.isLogging) f.count(state.pointCount) else DASH,
-            rate = if (live) f.decimal(state.updateRateHz) else DASH,
-            speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
-            gpsTime = if (state.isLogging) f.clock(state.lastFixTimeMillis) else DASH,
-            modifier = modifier,
-        )
+    // The list is newest first, so this is the run that just ended (or the last one recorded).
+    val latest = runs.firstOrNull()
+    val hasSecondary = state.isLogging || latest != null
+    val secondary: @Composable (Modifier) -> Unit = { modifier ->
+        if (state.isLogging) {
+            StatsGrid(
+                satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
+                satellitesVisible = state.satellitesVisible.toString(),
+                accuracy = if (live) f.decimal(state.accuracyMeters) else DASH,
+                points = f.count(state.pointCount),
+                rate = if (live) f.decimal(state.updateRateHz) else DASH,
+                speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
+                gpsTime = f.clock(state.lastFixTimeMillis),
+                modifier = modifier,
+            )
+        } else if (latest != null) {
+            LatestRunRow(
+                title = f.runTitle(latest.startTimeMillis),
+                subtitle = f.runSubtitle(latest.endTimeMillis - latest.startTimeMillis, latest.pointCount),
+                onExport = { vm.openExport(setOf(latest.id)) },
+                modifier = modifier,
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -97,7 +119,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 primary(Modifier.weight(1f))
-                stats(Modifier.weight(1f))
+                if (hasSecondary) secondary(Modifier.weight(1f)) else Spacer(modifier = Modifier.weight(1f))
             }
         } else {
             Column(
@@ -108,10 +130,25 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
                     .padding(Gutter),
             ) {
                 primary(Modifier)
-                stats(Modifier.padding(top = 16.dp))
+                if (hasSecondary) secondary(Modifier.padding(top = 16.dp))
             }
         }
     }
+}
+
+/** The most recent run, in the tile slot while idle; a tap opens its Export page. */
+@Composable
+private fun LatestRunRow(title: String, subtitle: String, onExport: () -> Unit, modifier: Modifier = Modifier) {
+    ListItem(
+        headlineContent = { Text(title) },
+        modifier = modifier
+            .clip(MaterialTheme.shapes.large)
+            .clickable(onClickLabel = "Export", onClick = onExport),
+        overlineContent = { Text("Latest run") },
+        supportingContent = { Text(subtitle) },
+        trailingContent = { Icon(Icons.Outlined.Share, contentDescription = null) },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    )
 }
 
 /** The banner, the status hero and the controls — the half of the surface that is not the tiles. */
@@ -269,7 +306,7 @@ private fun RecordControls(
     }
 }
 
-/** Three fixed rows of two tiles — no flow layout, so a tick costs no measurement pass. */
+/** Three fixed rows of two tiles, shown only while logging — no flow layout, so a tick costs no measurement pass. */
 @Composable
 private fun StatsGrid(
     satellitesUsed: String,
