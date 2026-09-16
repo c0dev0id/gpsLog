@@ -1,8 +1,12 @@
 package de.codevoid.gpslog
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -39,6 +43,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { requestBatteryExemption() }
 
+    /**
+     * Record blocks Start while Location is off and says to turn it on — and the switch usually
+     * gets flipped from the quick-settings shade, which does not reliably pause the Activity. A
+     * resume-only read would therefore strand the user behind the very message telling them what
+     * to do. This is the platform's own signal for it, so no polling and no timer.
+     */
+    private val providersChanged = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = vm.refreshInternalGpsEnabled()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -54,6 +68,20 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        registerReceiver(
+            providersChanged,
+            IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    override fun onStop() {
+        super.onStop()
+        unregisterReceiver(providersChanged)
     }
 
     override fun onResume() {

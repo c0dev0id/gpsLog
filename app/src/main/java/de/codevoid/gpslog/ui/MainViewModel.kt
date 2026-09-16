@@ -106,8 +106,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Whether Location is switched on for the internal provider. Unlike presence this moves, and
-     * it moves outside the app, so the Activity re-reads it on resume — the same treatment
-     * [preciseLocation] gets, rather than a second broadcast receiver for one boolean.
+     * it moves outside the app — usually from the quick-settings shade, which does not reliably
+     * pause the Activity. So the Activity both re-reads it on resume and listens for the
+     * platform's `PROVIDERS_CHANGED` broadcast while it is started; otherwise Start would stay
+     * greyed out for a user who had just done exactly what the subtitle asked.
      */
     private val _internalGpsEnabled =
         MutableStateFlow(hasInternalGps && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
