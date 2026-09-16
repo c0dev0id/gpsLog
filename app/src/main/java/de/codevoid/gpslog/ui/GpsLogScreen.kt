@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.LocationOn
@@ -70,6 +71,8 @@ fun GpsLogScreen(
     // A saved index from a build with four destinations still lands on Settings via the `else`.
     var tab by rememberSaveable { mutableIntStateOf(TAB_RECORD) }
     val wide = LocalWindowInfo.current.containerDpSize.width >= WideWindowMinWidth
+    // Hoisted so the Runs list keeps its scroll position under the Export page pushed over it.
+    val runsListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val recording = active != null
     val paused = active?.paused == true
     val select: (Int) -> Unit = { index ->
@@ -123,7 +126,7 @@ fun GpsLogScreen(
                 } else {
                     when (tab) {
                         TAB_RECORD -> RecordSurface(vm = vm, wide = wide, onOpenSettings = onOpenSettings)
-                        TAB_RUNS -> RunsSurface(vm = vm, onGoToRecord = { tab = TAB_RECORD })
+                        TAB_RUNS -> RunsSurface(vm = vm, listState = runsListState, onGoToRecord = { tab = TAB_RECORD })
                         else -> SettingsSurface(vm = vm, onShareDebugLog = onShareDebugLog, onInstall = onInstall)
                     }
                 }

@@ -264,6 +264,8 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   dialog; keeps the merged run selected) and Export. The active run may be
   exported but is excluded from Delete/Merge. Never swap the row modifier
   between modes — the swap would happen under a finger that is still down.
+  The list's `LazyListState` is hoisted to the shell so the Export page pushed
+  over it does not reset the scroll position.
 - **Export** (`ExportSurface.kt`) — the page for `exportTarget`: a single run
   reads by its title, several as a count; `FilterRow`s (meaning left, 120 dp
   field with a `suffix` unit right; the pure parsers commit valid input

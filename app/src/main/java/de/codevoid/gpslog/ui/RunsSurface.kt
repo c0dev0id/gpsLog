@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -30,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +57,7 @@ import java.util.Locale
  * ticks never reach this surface; the active row shows the disk-derived count like every other row.
  */
 @Composable
-internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
+internal fun RunsSurface(vm: MainViewModel, listState: LazyListState, onGoToRecord: () -> Unit) {
     val runs by vm.runs.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val active by vm.activeRun.collectAsStateWithLifecycle()
@@ -70,6 +72,10 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = selecting) { vm.clearSelection() }
+    // A flag restored after process death outlives the selection it belonged to; drop it with it.
+    LaunchedEffect(actionable) {
+        if (actionable == 0) confirmDelete = false
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (selecting) {
@@ -97,6 +103,7 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
             RunsEmptyState(onGoToRecord = onGoToRecord, modifier = Modifier.weight(1f))
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .widthIn(max = ContentMaxWidth)
@@ -161,13 +168,14 @@ private fun RunRow(
     onToggle: () -> Unit,
     onExport: () -> Unit,
 ) {
+    val toggleLabel = if (isSelected) "Deselect" else "Select"
     ListItem(
         headlineContent = { Text(title) },
         modifier = Modifier
             .semantics { selected = isSelected }
             .combinedClickable(
-                onClickLabel = if (selecting) null else "Export",
-                onLongClickLabel = "Select",
+                onClickLabel = if (selecting) toggleLabel else "Export",
+                onLongClickLabel = toggleLabel,
                 onLongClick = onToggle,
                 onClick = { if (selecting) onToggle() else onExport() },
             ),
