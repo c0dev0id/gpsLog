@@ -363,7 +363,14 @@ private fun StatsGrid(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = minHeight),
-            verticalArrangement = if (spread) Arrangement.SpaceEvenly else Arrangement.spacedBy(20.dp),
+            // A fixed gap, centred in whatever height is left: SpaceEvenly put more space between
+            // the rows than the rows themselves occupied, so the six values stopped reading as one
+            // cluster and became three floating pairs.
+            verticalArrangement = if (spread) {
+                Arrangement.spacedBy(TileGap, Alignment.CenterVertically)
+            } else {
+                Arrangement.spacedBy(20.dp)
+            },
         ) {
             StatRow {
                 StatTile(

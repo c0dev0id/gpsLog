@@ -53,6 +53,9 @@ internal val WideContentMaxHeight = 560.dp
 /** Horizontal page margin. */
 internal val Gutter = 16.dp
 
+/** Space between the rows of the live-value panel when it is given the height of a wide window. */
+internal val TileGap = 28.dp
+
 /** Height of the primary verb buttons (Start/Stop/Pause, Delete/Merge, Export). */
 internal val ControlHeight = 56.dp
 
