@@ -279,7 +279,9 @@ schemes are always available, so there is no fallback palette.
 experimental Material opt-in — do not reintroduce `MaterialExpressiveTheme`
 (spring motion is wrong for a still recording screen, and its motion-scheme
 factories are internal in material3 1.4.0) or `material-icons-extended` (the
-core set covers every icon; Stop and Pause are text buttons by design). Motion
+core set covers every icon; Stop and Pause are text buttons by design).
+`material-icons-core` is an explicit, BOM-managed dependency — material3 does
+not put it on the compile classpath. Motion
 budget: two `AnimatedVisibility` transitions (precise-location banner, selection
 tray) plus component-internal animation — no perpetual animation, no
 destination transitions, no elapsed-time ticker.
