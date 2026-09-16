@@ -170,7 +170,10 @@ cleared only for a run that never began, so an interrupted one stays resumable.
 `service/BootReceiver` sends `ACTION_RESUME` after `BOOT_COMPLETED` if an
 active run is persisted. Only the user's Stop clears the marker; a process
 kill or reboot therefore continues the same file until Stop. A user
-Force-Stop is not resumed.
+Force-Stop is not resumed. Both refusal paths honour that rule: a run that
+never began gives up its marker, an interrupted one keeps its own — at
+`BOOT_COMPLETED` the Bluetooth adapter is routinely not up yet, and clearing
+there ended live runs for good.
 
 Threading contract: all run state (`writer`, `runId`, `pointCount`, `paused`,
 rate window) lives on the dedicated `gps-logger` `HandlerThread`; fixes are
@@ -297,8 +300,11 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
   status is *Ready*, so the word and the button cannot disagree; for the same
   reason the precise-location banner stays down while the status is *No GPS
   device*. `internalGpsEnabled` is a `StateFlow` re-read in `onResume`, like
-  `preciseLocation`: the Location switch moves outside the app, and one
-  boolean does not earn a `PROVIDERS_CHANGED_ACTION` receiver.
+  `preciseLocation`, *and* driven by a `PROVIDERS_CHANGED_ACTION` receiver
+  registered for the Activity's started lifetime: the switch is usually
+  flipped from the quick-settings shade, which does not reliably pause the
+  Activity, so a resume-only read would strand the user behind the very
+  message telling them to flip it.
 - **Runs** (`RunsSurface.kt`) — stock two-line `ListItem` rows with ONE
   `combinedClickable` in both modes: tap opens the run's Export page, long-press
   toggles selection; selection mode is derived (`selected.isNotEmpty()`), shows
