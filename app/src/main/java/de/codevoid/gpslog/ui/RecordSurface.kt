@@ -73,7 +73,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
     val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
 
     val external = recordingSource.isNotEmpty()
-    val status = recordStatus(state, external, preciseLocation)
+    val status = recordStatus(state, external, preciseLocation, vm.hasInternalGps)
     // Receiver-dependent values mean nothing unless the source is actually delivering.
     val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
 
@@ -82,13 +82,18 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
 
     val primary: @Composable (Modifier) -> Unit = { modifier ->
         RecordPrimary(
-            preciseLocation = preciseLocation,
+            // Granting precise location changes nothing on a device with no chipset, so the
+            // banner would only contradict the word above it.
+            showPreciseLocationBanner = !preciseLocation && status != RecordStatus.NoDevice,
             onOpenSettings = onOpenSettings,
             word = status.label,
             wordColor = statusColor(status),
             subtitle = recordSubtitle(status, external, state.startTimeMillis, state.lastFixTimeMillis, f),
             isLogging = state.isLogging,
             isPaused = state.isPaused,
+            // The word on screen is the gate: every idle status but Ready names something that
+            // stops a run, so the button can never offer what the headline has just refused.
+            canStart = status == RecordStatus.Idle,
             onStart = vm::start,
             onStop = vm::stop,
             onPause = vm::pause,
@@ -183,13 +188,14 @@ private fun LatestRunRow(title: String, subtitle: String, onExport: () -> Unit, 
 /** The banner, the status hero and the controls — the half of the surface that is not the tiles. */
 @Composable
 private fun RecordPrimary(
-    preciseLocation: Boolean,
+    showPreciseLocationBanner: Boolean,
     onOpenSettings: () -> Unit,
     word: String,
     wordColor: Color,
     subtitle: String,
     isLogging: Boolean,
     isPaused: Boolean,
+    canStart: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPause: () -> Unit,
@@ -205,7 +211,7 @@ private fun RecordPrimary(
         verticalArrangement = if (spread) Arrangement.Center else Arrangement.Top,
     ) {
         AnimatedVisibility(
-            visible = !preciseLocation,
+            visible = showPreciseLocationBanner,
             enter = RevealEnter,
             exit = RevealExit,
         ) {
@@ -223,7 +229,7 @@ private fun RecordPrimary(
         RecordControls(
             isLogging = isLogging,
             isPaused = isPaused,
-            canStart = preciseLocation,
+            canStart = canStart,
             onStart = onStart,
             onStop = onStop,
             onPause = onPause,
@@ -239,7 +245,11 @@ private fun statusColor(status: RecordStatus): Color = when (status) {
     RecordStatus.Fix -> MaterialTheme.colorScheme.primary
     RecordStatus.Idle, RecordStatus.Searching -> MaterialTheme.colorScheme.onSurface
     RecordStatus.Paused -> MaterialTheme.colorScheme.onSurfaceVariant
-    RecordStatus.Unavailable, RecordStatus.Disabled, RecordStatus.ReceiverOff -> MaterialTheme.colorScheme.error
+    RecordStatus.NoDevice,
+    RecordStatus.Unavailable,
+    RecordStatus.Disabled,
+    RecordStatus.ReceiverOff,
+    -> MaterialTheme.colorScheme.error
 }
 
 /**
@@ -304,6 +314,9 @@ private fun StateHero(word: String, wordColor: Color, subtitle: String, modifier
  * screen at a time and it is always the "make it record" verb; Stop is outlined in `error`, like
  * Delete on the Runs tray, so the terminal action reads as terminal without being the heaviest
  * thing on the screen. Takes primitives so it skips on ticks.
+ *
+ * [canStart] is the caller's reading of the status word, so a device with no GPS chipset, or one
+ * that is missing precise location, shows Start greyed rather than letting it fail in the service.
  */
 @Composable
 private fun RecordControls(

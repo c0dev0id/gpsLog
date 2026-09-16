@@ -2,6 +2,7 @@ package de.codevoid.gpslog.ui
 
 import android.app.Application
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.codevoid.gpslog.App
@@ -92,6 +93,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _latestDebugLog = MutableStateFlow<DebugLog?>(null)
     val latestDebugLog = _latestDebugLog.asStateFlow()
+
+    /**
+     * Whether this device has a GNSS chipset at all. A Wi-Fi-only tablet has no `GPS_PROVIDER`,
+     * so only an external Bluetooth receiver can record on it. Read once: hardware does not
+     * appear while the process lives, so this is a fact, not a flow.
+     */
+    val hasInternalGps: Boolean =
+        app.getSystemService(LocationManager::class.java).hasProvider(LocationManager.GPS_PROVIDER)
 
     /** e.g. `dev-abc1234` for a nightly, `0.0.1` for a tagged/local build. */
     val installedVersion: String =

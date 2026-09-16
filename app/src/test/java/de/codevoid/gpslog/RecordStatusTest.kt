@@ -32,37 +32,66 @@ class RecordStatusTest {
 
     @Test
     fun idleDependsOnPreciseLocation() {
-        assertEquals(RecordStatus.Idle, recordStatus(LoggingState(), external = false, preciseLocation = true))
-        assertEquals(RecordStatus.Unavailable, recordStatus(LoggingState(), external = false, preciseLocation = false))
+        assertEquals(RecordStatus.Idle, recordStatus(LoggingState(), external = false, preciseLocation = true, hasInternalGps = true))
+        assertEquals(RecordStatus.Unavailable, recordStatus(LoggingState(), external = false, preciseLocation = false, hasInternalGps = true))
+    }
+
+    @Test
+    fun missingInternalGpsIsNoDeviceAndOutranksAMissingPermission() {
+        assertEquals(
+            RecordStatus.NoDevice,
+            recordStatus(LoggingState(), external = false, preciseLocation = true, hasInternalGps = false),
+        )
+        // There is nothing to grant: the chipset is what is missing, not the permission.
+        assertEquals(
+            RecordStatus.NoDevice,
+            recordStatus(LoggingState(), external = false, preciseLocation = false, hasInternalGps = false),
+        )
+    }
+
+    @Test
+    fun anExternalReceiverIsUnaffectedByAMissingChipset() {
+        assertEquals(
+            RecordStatus.Idle,
+            recordStatus(LoggingState(), external = true, preciseLocation = true, hasInternalGps = false),
+        )
+    }
+
+    @Test
+    fun missingInternalGpsNeverOverridesARunInProgress() {
+        assertEquals(
+            RecordStatus.Fix,
+            recordStatus(logging(gnssRunning = true, used = 5), false, true, hasInternalGps = false),
+        )
     }
 
     @Test
     fun pausedBeatsEverythingElse() {
-        assertEquals(RecordStatus.Paused, recordStatus(logging(paused = true, gpsEnabled = false), false, true))
+        assertEquals(RecordStatus.Paused, recordStatus(logging(paused = true, gpsEnabled = false), false, true, true))
     }
 
     @Test
     fun providerOffIsDisabledOnlyForTheInternalSource() {
-        assertEquals(RecordStatus.Disabled, recordStatus(logging(gpsEnabled = false), external = false, preciseLocation = true))
+        assertEquals(RecordStatus.Disabled, recordStatus(logging(gpsEnabled = false), external = false, preciseLocation = true, hasInternalGps = true))
         // The service starts an external run with gpsEnabled = false and drops it on a link loss.
-        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gpsEnabled = false), external = true, preciseLocation = true))
+        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gpsEnabled = false), external = true, preciseLocation = true, hasInternalGps = true))
     }
 
     @Test
     fun engineStoppedIsReceiverOffForBothSources() {
-        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gnssRunning = false), false, true))
-        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gnssRunning = false), true, true))
+        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gnssRunning = false), false, true, true))
+        assertEquals(RecordStatus.ReceiverOff, recordStatus(logging(gnssRunning = false), true, true, true))
     }
 
     @Test
     fun runningEngineIsSearchingUntilSatellitesAreUsed() {
-        assertEquals(RecordStatus.Searching, recordStatus(logging(gnssRunning = true, used = 0), false, true))
-        assertEquals(RecordStatus.Fix, recordStatus(logging(gnssRunning = true, used = 5), false, true))
+        assertEquals(RecordStatus.Searching, recordStatus(logging(gnssRunning = true, used = 0), false, true, true))
+        assertEquals(RecordStatus.Fix, recordStatus(logging(gnssRunning = true, used = 5), false, true, true))
     }
 
     @Test
     fun revokedPreciseLocationDoesNotHideTheLiveState() {
-        assertEquals(RecordStatus.Fix, recordStatus(logging(gnssRunning = true, used = 5), false, preciseLocation = false))
+        assertEquals(RecordStatus.Fix, recordStatus(logging(gnssRunning = true, used = 5), false, preciseLocation = false, hasInternalGps = true))
     }
 
     @Test
@@ -70,6 +99,10 @@ class RecordStatusTest {
         assertEquals("Internal GPS", recordSubtitle(RecordStatus.Idle, false, null, null, f))
         assertEquals("External receiver", recordSubtitle(RecordStatus.Idle, true, null, null, f))
         assertEquals("Precise location is off", recordSubtitle(RecordStatus.Unavailable, false, null, null, f))
+        assertEquals(
+            "Select an external receiver in Settings",
+            recordSubtitle(RecordStatus.NoDevice, false, null, null, f),
+        )
     }
 
     @Test

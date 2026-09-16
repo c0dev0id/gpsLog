@@ -53,10 +53,19 @@ import java.io.File
 import java.time.ZoneId
 import java.util.Locale
 
+/** One phrase for the missing chipset, so the row and the picker agree word for word. */
+private const val NoDevice = "No GPS device found"
+
+private const val DisabledAlpha = 0.38f
+
 /**
  * Preferences as list rows in three groups: the recording source (one row naming the current
  * device, which opens a picker dialog), diagnostics (the debug NMEA log and its share row) and
  * About (the version and the nightly updater).
+ *
+ * On a device with no GNSS chipset the source row and the picker's internal option both read
+ * "No GPS device found", and the internal option cannot be chosen — an external receiver is the
+ * only thing that can record there.
  */
 @Composable
 internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onInstall: (File) -> Unit) {
@@ -78,7 +87,11 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
                 .padding(bottom = Gutter),
         ) {
             SectionHeader("Recording", modifier = Modifier.padding(horizontal = Gutter))
-            SourceGroup(recordingSource = recordingSource, onSelectSource = vm::setRecordingSource)
+            SourceGroup(
+                recordingSource = recordingSource,
+                hasInternalGps = vm.hasInternalGps,
+                onSelectSource = vm::setRecordingSource,
+            )
             HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
             SectionHeader("Diagnostics", modifier = Modifier.padding(horizontal = Gutter))
             DebugLogRow(enabled = debugLogging, onSetEnabled = vm::setDebugLogging)
@@ -112,7 +125,11 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
  */
 @SuppressLint("MissingPermission")
 @Composable
-private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Unit) {
+private fun SourceGroup(
+    recordingSource: String,
+    hasInternalGps: Boolean,
+    onSelectSource: (String) -> Unit,
+) {
     val context = LocalContext.current
     var granted by remember {
         mutableStateOf(
@@ -142,10 +159,12 @@ private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Uni
 
     val external = recordingSource.isNotEmpty()
     // A receiver unpaired since it was chosen has no name left; its address still names it.
-    val current = if (external) {
-        devices.firstOrNull { it.second == recordingSource }?.first ?: recordingSource
-    } else {
-        "Internal GPS"
+    val current = when {
+        external -> devices.firstOrNull { it.second == recordingSource }?.first ?: recordingSource
+        hasInternalGps -> "Internal GPS"
+        // The stored source is the internal chipset, but there is none — say so where the device
+        // is named rather than leaving a source that cannot record reading as a working choice.
+        else -> NoDevice
     }
 
     ListItem(
@@ -157,6 +176,7 @@ private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Uni
     if (picking) {
         SourcePickerDialog(
             current = recordingSource,
+            hasInternalGps = hasInternalGps,
             devices = devices,
             granted = granted,
             onRequestPermission = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
@@ -176,6 +196,7 @@ private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Uni
 @Composable
 private fun SourcePickerDialog(
     current: String,
+    hasInternalGps: Boolean,
     devices: List<Pair<String, String>>,
     granted: Boolean,
     onRequestPermission: () -> Unit,
@@ -193,8 +214,9 @@ private fun SourcePickerDialog(
             ) {
                 SourceOption(
                     name = "Internal GPS",
-                    detail = "The phone's own chipset",
+                    detail = if (hasInternalGps) "The device's own chipset" else NoDevice,
                     selected = current.isEmpty(),
+                    enabled = hasInternalGps,
                     onSelect = { onSelect("") },
                 )
                 if (!granted) {
@@ -237,20 +259,36 @@ private fun SourcePickerDialog(
 
 /**
  * One radio row inside the picker. A plain Row, not a `ListItem`: a list item paints its own
- * surface colour, which would band against the dialog's container.
+ * surface colour, which would band against the dialog's container. A row is shown [enabled] =
+ * false rather than hidden, so a device with no chipset still says what is missing instead of
+ * silently offering one option.
  */
 @Composable
-private fun SourceOption(name: String, detail: String, selected: Boolean, onSelect: () -> Unit) {
+private fun SourceOption(
+    name: String,
+    detail: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    enabled: Boolean = true,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = null)
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
         Column(modifier = Modifier.padding(start = 12.dp)) {
-            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledAlpha)
+                },
+            )
             Text(
                 detail,
                 style = MaterialTheme.typography.bodyMedium,
@@ -287,7 +325,6 @@ private fun DebugLogRow(enabled: Boolean, onSetEnabled: (Boolean) -> Unit) {
 @Composable
 private fun ShareLogRow(captured: String?, onShare: () -> Unit) {
     val hasLog = captured != null
-    val disabledAlpha = 0.38f
     ListItem(
         headlineContent = { Text("Share latest log") },
         modifier = Modifier.clickable(enabled = hasLog, onClick = onShare),
@@ -297,8 +334,8 @@ private fun ShareLogRow(captured: String?, onShare: () -> Unit) {
             ListItemDefaults.colors()
         } else {
             ListItemDefaults.colors(
-                headlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
-                trailingIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
+                headlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledAlpha),
+                trailingIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledAlpha),
             )
         },
     )

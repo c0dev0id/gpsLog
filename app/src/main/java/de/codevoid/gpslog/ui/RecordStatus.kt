@@ -6,6 +6,8 @@ import de.codevoid.gpslog.service.LoggingState
 enum class RecordStatus(val label: String) {
     /** Not logging, ready to start. */
     Idle("Ready"),
+    /** Not logging: the internal source is chosen but this device has no GPS chipset. */
+    NoDevice("No GPS device"),
     /** Not logging and precise location is denied, so Start is refused. */
     Unavailable("Unavailable"),
     Paused("Paused"),
@@ -21,9 +23,22 @@ enum class RecordStatus(val label: String) {
  * Derives the status from the live state. [external] matters for `gpsEnabled`: the service
  * initialises it as `isInternalSource && providerEnabled` and drops it on a Bluetooth disconnect,
  * so for an external receiver a false value means "receiver not connected", never "GPS disabled".
+ *
+ * [hasInternalGps] is a hardware fact, so it only blocks the internal source, and only while
+ * idle: a run that is already recording reports what it is doing. It outranks [preciseLocation]
+ * because a missing chipset is not something the user can grant their way out of.
  */
-fun recordStatus(state: LoggingState, external: Boolean, preciseLocation: Boolean): RecordStatus = when {
-    !state.isLogging -> if (preciseLocation) RecordStatus.Idle else RecordStatus.Unavailable
+fun recordStatus(
+    state: LoggingState,
+    external: Boolean,
+    preciseLocation: Boolean,
+    hasInternalGps: Boolean,
+): RecordStatus = when {
+    !state.isLogging -> when {
+        !external && !hasInternalGps -> RecordStatus.NoDevice
+        !preciseLocation -> RecordStatus.Unavailable
+        else -> RecordStatus.Idle
+    }
     state.isPaused -> RecordStatus.Paused
     !state.gpsEnabled -> if (external) RecordStatus.ReceiverOff else RecordStatus.Disabled
     !state.gnssRunning -> RecordStatus.ReceiverOff
@@ -51,6 +66,7 @@ fun recordSubtitle(
     }
     return when (status) {
         RecordStatus.Idle -> if (external) "External receiver" else "Internal GPS"
+        RecordStatus.NoDevice -> "Select an external receiver in Settings"
         RecordStatus.Unavailable -> "Precise location is off"
         RecordStatus.Disabled -> problem("Turn on Location in system settings", since)
         RecordStatus.ReceiverOff -> problem(if (external) "Waiting for the receiver" else "GNSS engine stopped", since)
