@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -145,15 +145,22 @@ private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Uni
             onSelect = { onSelectSource("") },
         )
         if (!granted) {
-            ListItem(
-                headlineContent = { Text("Paired receivers") },
-                supportingContent = { Text("Allow Bluetooth access to list paired devices.") },
-                trailingContent = {
-                    TextButton(onClick = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) }) {
-                        Text("Allow")
-                    }
-                },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = Gutter, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Allow Bluetooth access to list paired receivers.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) }) {
+                    Text("Allow")
+                }
+            }
         }
         devices.forEach { (name, mac) ->
             SourceOption(
@@ -215,7 +222,10 @@ private fun DebugLogRow(enabled: Boolean, onSetEnabled: (Boolean) -> Unit) {
     )
 }
 
-/** Shares the newest captured log; disabled, with the reason, while there is none. */
+/**
+ * Shares the newest captured log; disabled while there is none, with the reason left fully legible.
+ * Rows in this group carry no leading slot so their headlines share one left edge.
+ */
 @Composable
 private fun ShareLogRow(captured: String?, onShare: () -> Unit) {
     val hasLog = captured != null
@@ -224,20 +234,22 @@ private fun ShareLogRow(captured: String?, onShare: () -> Unit) {
         headlineContent = { Text("Share latest log") },
         modifier = Modifier.clickable(enabled = hasLog, onClick = onShare),
         supportingContent = { Text(if (captured != null) "Captured $captured" else "No log captured yet") },
-        leadingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
+        trailingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
         colors = if (hasLog) {
             ListItemDefaults.colors()
         } else {
             ListItemDefaults.colors(
                 headlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
-                leadingIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
-                supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha),
+                trailingIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha),
             )
         },
     )
 }
 
-/** One row whose slots follow the updater state; progress only animates while a request is in flight. */
+/**
+ * One row whose slots follow the updater state; the state glyph sits in the trailing slot so the
+ * headline keeps the group's left edge, and progress only animates while a request is in flight.
+ */
 @Composable
 private fun UpdateRow(state: UpdateState, f: Formats, onCheck: () -> Unit, onInstall: () -> Unit) {
     when (state) {
@@ -245,27 +257,24 @@ private fun UpdateRow(state: UpdateState, f: Formats, onCheck: () -> Unit, onIns
             headlineContent = { Text("Check for updates") },
             modifier = Modifier.clickable(onClick = onCheck),
             supportingContent = { Text("Compares with the latest development build on GitHub") },
-            leadingContent = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+            trailingContent = { Icon(Icons.Filled.Refresh, contentDescription = null) },
         )
         UpdateState.Checking -> ListItem(
             headlineContent = { Text("Checking…") },
-            leadingContent = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+            supportingContent = { Text("Compares with the latest development build on GitHub") },
             trailingContent = { CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp) },
         )
         UpdateState.UpToDate -> ListItem(
             headlineContent = { Text("Up to date") },
             modifier = Modifier.clickable(onClick = onCheck),
             supportingContent = { Text("The installed build matches the latest development build") },
-            leadingContent = {
+            trailingContent = {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             },
         )
         is UpdateState.Available -> ListItem(
             headlineContent = { Text("Update available") },
             supportingContent = { Text("dev-${state.nightly.sha}") },
-            leadingContent = {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
             trailingContent = { Button(onClick = onInstall) { Text("Install") } },
         )
         is UpdateState.Downloading -> ListItem(
@@ -283,7 +292,7 @@ private fun UpdateRow(state: UpdateState, f: Formats, onCheck: () -> Unit, onIns
             headlineContent = { Text("Check for updates") },
             modifier = Modifier.clickable(onClick = onCheck),
             supportingContent = { Text(state.message, color = MaterialTheme.colorScheme.error) },
-            leadingContent = {
+            trailingContent = {
                 Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
             },
         )
