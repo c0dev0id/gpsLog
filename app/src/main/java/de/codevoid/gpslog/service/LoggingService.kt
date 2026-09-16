@@ -473,6 +473,13 @@ class LoggingService : Service(), FixSink {
                 Notification.Action.Builder(null as Icon?, label, serviceIntent(action)).build()
             )
         }
+        // Stop is always offered, after the toggle so the Pause/Resume slot never moves. It asks
+        // nothing, like the in-app Stop: a mis-tap loses no data and Merge rejoins the halves.
+        builder.addAction(
+            Notification.Action.Builder(
+                null as Icon?, getString(R.string.notif_action_stop), serviceIntent(ACTION_STOP),
+            ).build()
+        )
         return builder.build()
     }
 
