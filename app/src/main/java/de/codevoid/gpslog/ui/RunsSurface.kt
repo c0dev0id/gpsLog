@@ -14,14 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -111,17 +113,26 @@ internal fun RunsSurface(vm: MainViewModel, listState: LazyListState, onGoToReco
                     .align(Alignment.CenterHorizontally),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
-                items(runs, key = { it.id }, contentType = { "run" }) { run ->
-                    RunRow(
-                        title = f.runTitle(run.startTimeMillis),
-                        subtitle = f.runSubtitle(run.endTimeMillis - run.startTimeMillis, run.pointCount),
-                        selecting = selecting,
-                        isSelected = run.id in selected,
-                        active = run.id == activeId,
-                        activePaused = activePaused,
-                        onToggle = { vm.toggleSelect(run.id) },
-                        onExport = { vm.openExport(setOf(run.id)) },
-                    )
+                itemsIndexed(
+                    runs,
+                    key = { _, run -> run.id },
+                    contentType = { _, _ -> "run" },
+                ) { index, run ->
+                    Column {
+                        RunRow(
+                            title = f.runTitle(run.startTimeMillis),
+                            subtitle = f.runSubtitle(run.endTimeMillis - run.startTimeMillis, run.pointCount),
+                            selecting = selecting,
+                            isSelected = run.id in selected,
+                            active = run.id == activeId,
+                            activePaused = activePaused,
+                            onToggle = { vm.toggleSelect(run.id) },
+                            onExport = { vm.openExport(setOf(run.id)) },
+                        )
+                        // Without a divider the rows have no visible bounds: the container is
+                        // transparent and a short date does not fill the width of a wide window.
+                        if (index < runs.lastIndex) HorizontalDivider()
+                    }
                 }
             }
         }
@@ -156,6 +167,10 @@ internal fun RunsSurface(vm: MainViewModel, listState: LazyListState, onGoToReco
  * A stock two-line list row. One `combinedClickable` in both modes — its lambdas branch on
  * [selecting] — so the modifier is never swapped under a finger that is still down; the checkbox
  * exists only in selection mode and mirrors the row, it is not a second target.
+ *
+ * The trailing Share glyph is the row's affordance: it is the only thing saying a tap exports this
+ * run, so it is drawn whenever a tap would do that. The active run's tag sits in the overline
+ * rather than the trailing slot, where a wide window stranded it far from the run it describes.
  */
 @Composable
 private fun RunRow(
@@ -179,16 +194,21 @@ private fun RunRow(
                 onLongClick = onToggle,
                 onClick = { if (selecting) onToggle() else onExport() },
             ),
+        overlineContent = if (active) {
+            { ActiveTag(paused = activePaused) }
+        } else {
+            null
+        },
         supportingContent = { Text(subtitle) },
         leadingContent = if (selecting) {
             { Checkbox(checked = isSelected, onCheckedChange = null) }
         } else {
             null
         },
-        trailingContent = if (active) {
-            { ActiveTag(paused = activePaused) }
-        } else {
+        trailingContent = if (selecting) {
             null
+        } else {
+            { Icon(Icons.Outlined.Share, contentDescription = null) }
         },
         colors = ListItemDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
