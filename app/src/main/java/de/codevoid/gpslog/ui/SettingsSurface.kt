@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -107,6 +108,14 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
  * lazily from an "Allow" row so an internal-only user is never prompted. Bluetooth Class-of-Device
  * carries no "GNSS" flag, so every classic/dual paired device is listed and the user picks.
  */
+/**
+ * Chooses the run's fix source: the internal GPS (`""`) or a paired classic-Bluetooth GNSS
+ * receiver. Collapsed to one row that names the current source and opens a picker, because the
+ * list is unbounded: Bluetooth Class-of-Device carries no "GNSS" flag, so every paired classic
+ * device is offered and a phone with twenty of them would push the rest of Settings off screen.
+ * Reading the paired-device list and its names needs `BLUETOOTH_CONNECT`, requested lazily from
+ * inside the picker so an internal-only user is never prompted.
+ */
 @SuppressLint("MissingPermission")
 @Composable
 private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Unit) {
@@ -135,71 +144,126 @@ private fun SourceGroup(recordingSource: String, onSelectSource: (String) -> Uni
             emptyList()
         }
     }
-    val external = recordingSource.isNotEmpty()
+    var picking by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.selectableGroup()) {
-        SourceOption(
-            name = "Internal GPS",
-            detail = "The phone's own chipset",
-            selected = !external,
-            onSelect = { onSelectSource("") },
-        )
-        if (!granted) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = Gutter, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Allow Bluetooth access to list paired receivers.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) }) {
-                    Text("Allow")
-                }
-            }
-        }
-        devices.forEach { (name, mac) ->
-            SourceOption(
-                name = name,
-                detail = mac,
-                selected = mac == recordingSource,
-                onSelect = { onSelectSource(mac) },
-            )
-        }
-        // A chosen receiver that is not in the list (unpaired since, or the list needs the grant)
-        // still shows as the selection, by its address.
-        if (external && devices.none { it.second == recordingSource }) {
-            SourceOption(
-                name = recordingSource,
-                detail = if (granted) "No longer paired" else "Paired receiver",
-                selected = true,
-                onSelect = {},
-            )
-        }
+    val external = recordingSource.isNotEmpty()
+    // A receiver unpaired since it was chosen has no name left; its address still names it.
+    val current = if (external) {
+        devices.firstOrNull { it.second == recordingSource }?.first ?: recordingSource
+    } else {
+        "Internal GPS"
     }
-    if (external) {
-        Text(
-            "Records from the external receiver; the phone's own GPS stays free for navigation.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Gutter, vertical = 8.dp),
+
+    ListItem(
+        headlineContent = { Text("GPS device") },
+        modifier = Modifier.clickable { picking = true },
+        supportingContent = { Text(current) },
+    )
+
+    if (picking) {
+        SourcePickerDialog(
+            current = recordingSource,
+            devices = devices,
+            granted = granted,
+            onRequestPermission = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+            onSelect = {
+                onSelectSource(it)
+                picking = false
+            },
+            onDismiss = { picking = false },
         )
     }
 }
 
-/** One radio row; the whole row is the target and the button only mirrors it. */
+/**
+ * The picker itself: the internal chipset plus every paired classic device. Scrolls, because the
+ * list has no upper bound. Choosing a source applies it and closes, so Cancel is the only button.
+ */
+@Composable
+private fun SourcePickerDialog(
+    current: String,
+    devices: List<Pair<String, String>>,
+    granted: Boolean,
+    onRequestPermission: () -> Unit,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GPS device") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .selectableGroup(),
+            ) {
+                SourceOption(
+                    name = "Internal GPS",
+                    detail = "The phone's own chipset",
+                    selected = current.isEmpty(),
+                    onSelect = { onSelect("") },
+                )
+                if (!granted) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Allow Bluetooth access to list paired receivers.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onRequestPermission) { Text("Allow") }
+                    }
+                }
+                devices.forEach { (name, mac) ->
+                    SourceOption(
+                        name = name,
+                        detail = mac,
+                        selected = mac == current,
+                        onSelect = { onSelect(mac) },
+                    )
+                }
+                if (current.isNotEmpty() && devices.none { it.second == current }) {
+                    SourceOption(
+                        name = current,
+                        detail = if (granted) "No longer paired" else "Paired receiver",
+                        selected = true,
+                        onSelect = { onSelect(current) },
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * One radio row inside the picker. A plain Row, not a `ListItem`: a list item paints its own
+ * surface colour, which would band against the dialog's container.
+ */
 @Composable
 private fun SourceOption(name: String, detail: String, selected: Boolean, onSelect: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(name) },
-        modifier = Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onSelect),
-        supportingContent = { Text(detail) },
-        leadingContent = { RadioButton(selected = selected, onClick = null) },
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Column(modifier = Modifier.padding(start = 12.dp)) {
+            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 /**
