@@ -76,9 +76,15 @@ class BluetoothNmeaSource(
         }
     }
 
+    /** Opened on the caller's thread in [start]; written and closed only by the reader thread. */
+    private var debugLog: NmeaDebugLog? = null
+
     fun start() {
         if (running) return
         running = true
+        // Opened before the reader thread exists so the file is on disk by the time the service
+        // publishes the run and the UI lists the debug logs; Thread.start() hands it over.
+        debugLog = debugFile?.let { runCatching { NmeaDebugLog(it) }.getOrNull() }
         appContext.registerReceiver(
             aclReceiver,
             IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED),
@@ -102,7 +108,7 @@ class BluetoothNmeaSource(
     }
 
     private fun runLoop() {
-        val debug = debugFile?.let { runCatching { NmeaDebugLog(it) }.getOrNull() }
+        val debug = debugLog
         debug?.note("session start; device=$deviceAddress")
         var retryDelayMs = MIN_RECONNECT_DELAY_MS
         try {

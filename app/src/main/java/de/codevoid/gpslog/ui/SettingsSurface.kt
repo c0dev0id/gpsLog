@@ -82,7 +82,7 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
             SectionHeader("Diagnostics", modifier = Modifier.padding(horizontal = Gutter))
             DebugLogRow(enabled = debugLogging, onSetEnabled = vm::setDebugLogging)
             ShareLogRow(
-                captured = latestDebugLog?.let { f.runTitle(it.lastModified()) },
+                captured = latestDebugLog?.let { f.runTitle(it.capturedMillis) },
                 onShare = onShareDebugLog,
             )
             HorizontalDivider(modifier = Modifier.padding(top = 8.dp))

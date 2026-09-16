@@ -73,7 +73,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * The most recent captured NMEA debug log, or null when none exists. Refreshed with the run
      * list — on resume and whenever a run starts or stops, which is exactly when a log can appear.
      */
-    private val _latestDebugLog = MutableStateFlow<File?>(null)
+    private val _latestDebugLog = MutableStateFlow<DebugLog?>(null)
     val latestDebugLog = _latestDebugLog.asStateFlow()
 
     /** e.g. `dev-abc1234` for a nightly, `0.0.1` for a tagged/local build. */
@@ -186,11 +186,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun newestDebugLog(): File? =
+    /** IO thread: the timestamp is read here, once, so the UI never touches the file itself. */
+    private fun newestDebugLog(): DebugLog? =
         File(getApplication<Application>().cacheDir, "debug")
             .listFiles()
             ?.filter { it.isFile }
-            ?.maxByOrNull { it.lastModified() }
+            ?.map { DebugLog(it, it.lastModified()) }
+            ?.maxByOrNull { it.capturedMillis }
 
     fun start() = LoggingService.start(getApplication())
 
@@ -258,6 +260,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 }
+
+/** A captured NMEA debug log and when it was last written. */
+data class DebugLog(val file: File, val capturedMillis: Long)
 
 /** The run being logged, reduced to what the shell and the Runs list display. */
 data class ActiveRun(val id: Long, val paused: Boolean)

@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun shareDebugLog() {
-        val file = vm.latestDebugLog.value ?: return
+        val file = vm.latestDebugLog.value?.file ?: return
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = MIME_TEXT

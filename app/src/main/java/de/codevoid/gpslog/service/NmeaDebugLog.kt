@@ -10,7 +10,8 @@ import java.time.format.DateTimeFormatter
 /**
  * Appends the raw NMEA stream (and a few connection notes) to a plain-text file the user can share
  * for diagnostics. Each line is prefixed with a wall-clock timestamp so the actual delivery rate and
- * any gaps are measurable from the log. Written only from the Bluetooth reader thread, so no locking.
+ * any gaps are measurable from the log. Opened by whoever starts the source and then written and
+ * closed only from the thread that reads the receiver, so no locking.
  */
 class NmeaDebugLog(file: File) {
 
