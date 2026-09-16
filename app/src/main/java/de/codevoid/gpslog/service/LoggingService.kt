@@ -147,8 +147,7 @@ class LoggingService : Service(), FixSink {
                 pointCount = pointCount,
                 isPaused = paused,
                 // External "enabled" flips true once the first sentence arrives.
-                gpsEnabled = isInternalSource() &&
-                    locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+                gpsEnabled = isInternalSource() && internalGpsEnabled(),
             )
         )
         if (paused) {
@@ -159,6 +158,15 @@ class LoggingService : Service(), FixSink {
     }
 
     private fun isInternalSource(): Boolean = settings.recordingSource.value.isEmpty()
+
+    /**
+     * Whether the internal provider is switched on — false as well when the device has no GPS
+     * chipset. `isProviderEnabled` is only specified for a provider that exists, so presence is
+     * asked first rather than relying on it to answer false for a provider it never heard of.
+     */
+    private fun internalGpsEnabled(): Boolean =
+        locationManager.hasProvider(LocationManager.GPS_PROVIDER) &&
+            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
 
     /**
      * Acquires the configured fix source. Returns false when it cannot be started (permission
@@ -176,6 +184,13 @@ class LoggingService : Service(), FixSink {
             else Manifest.permission.BLUETOOTH_CONNECT
         if (checkSelfPermission(required) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "$required not granted; refusing to log")
+            return false
+        }
+        // A device without a GNSS chipset has no GPS_PROVIDER at all, and requestLocationUpdates
+        // throws IllegalArgumentException for a provider that does not exist — on this thread,
+        // which would take the process with it. Refuse before anything is registered.
+        if (internal && !locationManager.hasProvider(LocationManager.GPS_PROVIDER)) {
+            Log.w(TAG, "device has no GPS provider; refusing to log")
             return false
         }
         val debugFile = if (settings.debugLogging.value) {
@@ -328,8 +343,7 @@ class LoggingService : Service(), FixSink {
                     // Re-read rather than trust the pre-pause value: registering a listener does
                     // not report the provider's current state, and onProviderDisabled only fires
                     // on a change, so the provider may have been switched off while we were down.
-                    gpsEnabled = isInternalSource() &&
-                        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+                    gpsEnabled = isInternalSource() && internalGpsEnabled(),
                 )
             }
             updateNotificationNow(loggingNotifText())
