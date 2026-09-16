@@ -52,10 +52,14 @@ fun recordSubtitle(
     return when (status) {
         RecordStatus.Idle -> if (external) "External receiver" else "Internal GPS"
         RecordStatus.Unavailable -> "Precise location is off"
-        RecordStatus.Disabled -> "Turn on Location in system settings"
-        RecordStatus.ReceiverOff -> if (external) "Waiting for the receiver" else "GNSS engine stopped"
-        RecordStatus.Searching -> listOfNotNull("Waiting for a fix", since?.replaceFirstChar { it.lowercase() }).joinToString(" · ")
+        RecordStatus.Disabled -> problem("Turn on Location in system settings", since)
+        RecordStatus.ReceiverOff -> problem(if (external) "Waiting for the receiver" else "GNSS engine stopped", since)
+        RecordStatus.Searching -> problem("Waiting for a fix", since)
         RecordStatus.Fix -> listOfNotNull(since, span).joinToString(" · ")
         RecordStatus.Paused -> listOfNotNull(since, span?.let { "$it recorded" }).joinToString(" · ")
     }
 }
+
+/** "<what is wrong> · since 14:02" — the run's start time stays visible while it is in trouble. */
+private fun problem(text: String, since: String?): String =
+    listOfNotNull(text, since?.replaceFirstChar { it.lowercase() }).joinToString(" · ")

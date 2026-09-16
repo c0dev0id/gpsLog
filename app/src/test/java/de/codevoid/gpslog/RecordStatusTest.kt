@@ -73,10 +73,11 @@ class RecordStatusTest {
     }
 
     @Test
-    fun problemSubtitlesSayWhatToDo() {
-        assertEquals("Turn on Location in system settings", recordSubtitle(RecordStatus.Disabled, false, start, null, f))
-        assertEquals("Waiting for the receiver", recordSubtitle(RecordStatus.ReceiverOff, true, start, null, f))
-        assertEquals("GNSS engine stopped", recordSubtitle(RecordStatus.ReceiverOff, false, start, null, f))
+    fun problemSubtitlesSayWhatToDoAndKeepTheStartTime() {
+        assertEquals("Turn on Location in system settings · since 14:02", recordSubtitle(RecordStatus.Disabled, false, start, null, f))
+        assertEquals("Waiting for the receiver · since 14:02", recordSubtitle(RecordStatus.ReceiverOff, true, start, null, f))
+        assertEquals("GNSS engine stopped · since 14:02", recordSubtitle(RecordStatus.ReceiverOff, false, start, null, f))
+        assertEquals("GNSS engine stopped", recordSubtitle(RecordStatus.ReceiverOff, false, null, null, f))
     }
 
     @Test
