@@ -56,8 +56,11 @@ internal val Gutter = 16.dp
 /** Space between the rows of the live-value panel when it is given the height of a wide window. */
 internal val TileGap = 28.dp
 
-/** A wide window's column is wider than a pair of buttons ever needs to be. */
-internal val WideControlsMaxWidth = 400.dp
+/**
+ * A wide window's Record column is at most (840 - 2 x 16 - 24) / 2 = 392 dp, so a cap has to sit
+ * below that to bind at all. At 320 dp each of the two buttons still gets 154 dp.
+ */
+internal val WideControlsMaxWidth = 320.dp
 
 /** Height of the primary verb buttons (Start/Stop/Pause, Delete/Merge, Export). */
 internal val ControlHeight = 56.dp
