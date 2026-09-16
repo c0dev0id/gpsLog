@@ -15,9 +15,13 @@
     <!-- Read paired devices and open an RFCOMM link to an external Bluetooth GNSS receiver. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!--
+        Optional: a run can come from an external Bluetooth NMEA receiver instead, so a device
+        with no GNSS chipset is a supported configuration, not an unsupported one.
+    -->
     <uses-feature
         android:name="android.hardware.location.gps"
-        android:required="true" />
+        android:required="false" />
 
     <application
         android:name=".App"
