@@ -43,6 +43,13 @@ internal val WideWindowMinWidth = 600.dp
 /** Width cap for the two-column layouts of wide windows. */
 internal val WideContentMaxWidth = 840.dp
 
+/**
+ * Height cap for a wide window's content. A landscape phone is shorter than this, so its Record
+ * columns fill the window; a tall window (a tablet, either way up) stops stretching here instead
+ * of spreading six values over a metre of glass.
+ */
+internal val WideContentMaxHeight = 560.dp
+
 /** Horizontal page margin. */
 internal val Gutter = 16.dp
 

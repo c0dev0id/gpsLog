@@ -3,13 +3,15 @@ package de.codevoid.gpslog.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.ZoneId
@@ -48,10 +51,16 @@ import java.util.Locale
  * a fix" reads at arm's length; while logging, six tabular-numeral tiles carry the details, and
  * while idle the same slot holds the latest run with a Share glyph — the on-ramp to its Export
  * page, so a finished run is one tap from being shared. The controls sit above the slot in both
- * layouts, so swapping its content moves nothing under the finger. In a wide window the status and
- * controls sit beside the slot instead of above it. This is the only surface that collects
- * [MainViewModel.loggingState]; its children take Strings and Booleans, so a 2 s tick recomposes
- * only the tiles whose text changed.
+ * layouts, so swapping its content moves nothing under the finger.
+ *
+ * In a wide window the status and controls sit beside the slot. A run being recorded then fills
+ * the height (capped at [WideContentMaxHeight]): both columns take the same height, the status
+ * block centres against the panel and the six values spread over it, so a landscape window reads
+ * as one instrument panel instead of a third of a screen with two thirds of nothing. Idle content
+ * keeps its natural height and is centred.
+ *
+ * This is the only surface that collects [MainViewModel.loggingState]; its children take Strings
+ * and Booleans, so a 2 s tick recomposes only the tiles whose text changed.
  */
 @Composable
 internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () -> Unit) {
@@ -67,6 +76,9 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
     // Receiver-dependent values mean nothing unless the source is actually delivering.
     val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
 
+    // The values are worth the whole window only while they are moving.
+    val spread = wide && state.isLogging
+
     val primary: @Composable (Modifier) -> Unit = { modifier ->
         RecordPrimary(
             preciseLocation = preciseLocation,
@@ -80,13 +92,14 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
             onStop = vm::stop,
             onPause = vm::pause,
             onUnpause = vm::unpause,
+            spread = spread,
             modifier = modifier,
         )
     }
     // The list is newest first, so this is the run that just ended (or the last one recorded).
     val latest = runs.firstOrNull()
     val hasSecondary = state.isLogging || latest != null
-    val secondary: @Composable (Modifier) -> Unit = { modifier ->
+    val secondary: @Composable (Modifier, Dp) -> Unit = { modifier, columnHeight ->
         if (state.isLogging) {
             StatsGrid(
                 satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
@@ -96,6 +109,8 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
                 rate = if (live) f.decimal(state.updateRateHz) else DASH,
                 speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
                 gpsTime = f.clock(state.lastFixTimeMillis),
+                spread = spread,
+                minHeight = (columnHeight - Gutter * 2).coerceAtLeast(0.dp),
                 modifier = modifier,
             )
         } else if (latest != null) {
@@ -108,18 +123,30 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         if (wide) {
+            // Giving both columns the window's height as a minimum is what fills it; the scroll
+            // still takes over when the content needs more (a banner on a short landscape window).
+            val columnHeight = if (spread) {
+                (maxHeight - Gutter * 2).coerceIn(0.dp, WideContentMaxHeight)
+            } else {
+                0.dp
+            }
             Row(
                 modifier = Modifier
+                    .align(Alignment.Center)
                     .widthIn(max = WideContentMaxWidth)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(Gutter),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                primary(Modifier.weight(1f))
-                if (hasSecondary) secondary(Modifier.weight(1f)) else Spacer(modifier = Modifier.weight(1f))
+                val column = Modifier
+                    .weight(1f)
+                    .heightIn(min = columnHeight)
+                primary(column)
+                if (hasSecondary) secondary(column, columnHeight) else Spacer(modifier = Modifier.weight(1f))
             }
         } else {
             Column(
@@ -130,7 +157,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
                     .padding(Gutter),
             ) {
                 primary(Modifier)
-                if (hasSecondary) secondary(Modifier.padding(top = 16.dp))
+                if (hasSecondary) secondary(Modifier.padding(top = 16.dp), 0.dp)
             }
         }
     }
@@ -165,9 +192,15 @@ private fun RecordPrimary(
     onStop: () -> Unit,
     onPause: () -> Unit,
     onUnpause: () -> Unit,
+    spread: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
+    // Centred rather than pushed apart: the status and its buttons stay one block, balanced
+    // against the full-height panel beside them.
+    Column(
+        modifier = modifier,
+        verticalArrangement = if (spread) Arrangement.Center else Arrangement.Top,
+    ) {
         AnimatedVisibility(
             visible = !preciseLocation,
             enter = RevealEnter,
@@ -306,7 +339,13 @@ private fun RecordControls(
     }
 }
 
-/** Three fixed rows of two tiles, shown only while logging — no flow layout, so a tick costs no measurement pass. */
+/**
+ * Three fixed rows of two tiles — no flow layout, so a tick costs no measurement pass. While
+ * [spread] the rows share [minHeight] evenly and the numerals take the next type step, so a wide
+ * window's extra room becomes legible values rather than empty card. The height is asked of the
+ * rows themselves rather than of the panel, so it does not depend on `Surface` passing a minimum
+ * constraint through to its content.
+ */
 @Composable
 private fun StatsGrid(
     satellitesUsed: String,
@@ -316,42 +355,70 @@ private fun StatsGrid(
     rate: String,
     speed: String,
     gpsTime: String,
+    spread: Boolean,
+    minHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     Panel(modifier = modifier) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StatTile(
-                label = "Satellites in use",
-                value = satellitesUsed,
-                unit = "of $satellitesVisible",
-                modifier = Modifier.weight(1f),
-            )
-            StatTile(label = "Accuracy", value = accuracy, unit = "m", modifier = Modifier.weight(1f))
-        }
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .heightIn(min = minHeight),
+            verticalArrangement = if (spread) Arrangement.SpaceEvenly else Arrangement.spacedBy(20.dp),
         ) {
-            StatTile(label = "Points", value = points, unit = null, modifier = Modifier.weight(1f))
-            StatTile(label = "Rate", value = rate, unit = "Hz", modifier = Modifier.weight(1f))
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            StatTile(label = "Speed", value = speed, unit = "m/s", modifier = Modifier.weight(1f))
-            StatTile(label = "GPS time", value = gpsTime, unit = null, modifier = Modifier.weight(1f))
+            StatRow {
+                StatTile(
+                    label = "Satellites in use",
+                    value = satellitesUsed,
+                    unit = "of $satellitesVisible",
+                    large = spread,
+                    modifier = Modifier.weight(1f),
+                )
+                StatTile(
+                    label = "Accuracy",
+                    value = accuracy,
+                    unit = "m",
+                    large = spread,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            StatRow {
+                StatTile(label = "Points", value = points, unit = null, large = spread, modifier = Modifier.weight(1f))
+                StatTile(label = "Rate", value = rate, unit = "Hz", large = spread, modifier = Modifier.weight(1f))
+            }
+            StatRow {
+                StatTile(
+                    label = "Speed",
+                    value = speed,
+                    unit = "m/s",
+                    large = spread,
+                    modifier = Modifier.weight(1f),
+                )
+                StatTile(
+                    label = "GPS time",
+                    value = gpsTime,
+                    unit = null,
+                    large = spread,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
 
+/** Two tiles side by side; the panel's arrangement owns the space between the rows. */
+@Composable
+private fun StatRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        content = content,
+    )
+}
+
 /** One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). */
 @Composable
-private fun StatTile(label: String, value: String, unit: String?, modifier: Modifier = Modifier) {
+private fun StatTile(label: String, value: String, unit: String?, large: Boolean, modifier: Modifier = Modifier) {
     Column(modifier = modifier.semantics(mergeDescendants = true) {}) {
         Text(
             label,
@@ -363,7 +430,11 @@ private fun StatTile(label: String, value: String, unit: String?, modifier: Modi
         ValueWithUnit(
             value = value,
             unit = unit,
-            valueStyle = MaterialTheme.typography.headlineSmall,
+            valueStyle = if (large) {
+                MaterialTheme.typography.headlineMedium
+            } else {
+                MaterialTheme.typography.headlineSmall
+            },
             valueColor = if (value == DASH) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 4.dp),
         )
