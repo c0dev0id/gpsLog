@@ -70,11 +70,14 @@ internal fun RunsSurface(vm: MainViewModel, onGoToRecord: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         SurfaceHeader("Runs") {
             if (selected.isEmpty()) {
-                Text(
-                    summary,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // The empty state below already says there are no runs.
+                if (runs.isNotEmpty()) {
+                    Text(
+                        summary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             } else {
                 Text(
                     "${selected.size} selected",
