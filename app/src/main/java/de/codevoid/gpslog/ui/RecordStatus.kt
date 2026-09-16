@@ -11,7 +11,7 @@ enum class RecordStatus(val label: String) {
     /** Not logging and precise location is denied, so Start is refused. */
     Unavailable("Unavailable"),
     Paused("Paused"),
-    /** Internal source: the GPS provider is switched off in system settings. */
+    /** Internal source: Location is switched off in system settings. Blocks Start while idle. */
     Disabled("GPS disabled"),
     /** The receiver is not delivering: Bluetooth link down, or the GNSS engine stopped. */
     ReceiverOff("Receiver off"),
@@ -24,18 +24,24 @@ enum class RecordStatus(val label: String) {
  * initialises it as `isInternalSource && providerEnabled` and drops it on a Bluetooth disconnect,
  * so for an external receiver a false value means "receiver not connected", never "GPS disabled".
  *
- * [hasInternalGps] is a hardware fact, so it only blocks the internal source, and only while
- * idle: a run that is already recording reports what it is doing. It outranks [preciseLocation]
- * because a missing chipset is not something the user can grant their way out of.
+ * [hasInternalGps] and [internalGpsEnabled] describe the internal source only, and both apply
+ * only while idle — a run already recording reports what it is doing. The idle order is
+ * outermost obstacle first: absent hardware, then the system-wide Location switch, then the
+ * app's own permission, because that is the order in which fixing one can matter.
+ *
+ * Every idle answer but [RecordStatus.Idle] names something that stops a run, which is what lets
+ * the Start button be gated on this one value instead of on a second, drifting predicate.
  */
 fun recordStatus(
     state: LoggingState,
     external: Boolean,
     preciseLocation: Boolean,
     hasInternalGps: Boolean,
+    internalGpsEnabled: Boolean,
 ): RecordStatus = when {
     !state.isLogging -> when {
         !external && !hasInternalGps -> RecordStatus.NoDevice
+        !external && !internalGpsEnabled -> RecordStatus.Disabled
         !preciseLocation -> RecordStatus.Unavailable
         else -> RecordStatus.Idle
     }

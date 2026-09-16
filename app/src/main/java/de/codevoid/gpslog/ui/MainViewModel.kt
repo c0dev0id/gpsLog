@@ -41,6 +41,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = App.from(app).runs
     private val settings = App.from(app).settings
+    private val locationManager = app.getSystemService(LocationManager::class.java)
 
     val loggingState = LoggingStateHolder.state
 
@@ -101,8 +102,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * broadcast for presence anyway — so a flow would be ceremony. This is the UI affordance,
      * not the guarantee: the service asks again on its own thread before it registers anything.
      */
-    val hasInternalGps: Boolean =
-        app.getSystemService(LocationManager::class.java).hasProvider(LocationManager.GPS_PROVIDER)
+    val hasInternalGps: Boolean = locationManager.hasProvider(LocationManager.GPS_PROVIDER)
+
+    /**
+     * Whether Location is switched on for the internal provider. Unlike presence this moves, and
+     * it moves outside the app, so the Activity re-reads it on resume — the same treatment
+     * [preciseLocation] gets, rather than a second broadcast receiver for one boolean.
+     */
+    private val _internalGpsEnabled =
+        MutableStateFlow(hasInternalGps && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
+    val internalGpsEnabled = _internalGpsEnabled.asStateFlow()
 
     /** e.g. `dev-abc1234` for a nightly, `0.0.1` for a tagged/local build. */
     val installedVersion: String =
@@ -159,6 +168,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPreciseLocation(granted: Boolean) {
         _preciseLocation.value = granted
+    }
+
+    /** Called from `onResume`: Location can be switched off while the app is in the background. */
+    fun refreshInternalGpsEnabled() {
+        _internalGpsEnabled.value =
+            hasInternalGps && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     }
 
     /** The short commit of the installed nightly, or null when this isn't a nightly build. */

@@ -68,12 +68,13 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
     val state by vm.loggingState.collectAsStateWithLifecycle()
     val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
+    val internalGpsEnabled by vm.internalGpsEnabled.collectAsStateWithLifecycle()
     // Emits only on a refresh (resume, delete/merge, a run starting or ending), never on a fix.
     val runs by vm.runs.collectAsStateWithLifecycle()
     val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
 
     val external = recordingSource.isNotEmpty()
-    val status = recordStatus(state, external, preciseLocation, vm.hasInternalGps)
+    val status = recordStatus(state, external, preciseLocation, vm.hasInternalGps, internalGpsEnabled)
     // Receiver-dependent values mean nothing unless the source is actually delivering.
     val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
 
