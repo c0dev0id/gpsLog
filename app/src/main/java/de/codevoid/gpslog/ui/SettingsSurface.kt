@@ -4,7 +4,9 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -141,8 +143,13 @@ private fun SourceGroup(
         ActivityResultContracts.RequestPermission()
     ) { granted = it }
 
+    var picking by remember { mutableStateOf(false) }
+
     val adapter = remember { context.getSystemService(BluetoothManager::class.java)?.adapter }
-    val devices = remember(granted, adapter) {
+    // Keyed on `picking` so the list is re-read every time the dialog opens. This screen stays
+    // composed across a trip to the system Bluetooth settings, so a receiver paired there would
+    // otherwise never show up — and on a device with no chipset that trip is the only way out.
+    val devices = remember(granted, adapter, picking) {
         if (granted && adapter != null) {
             adapter.bondedDevices.orEmpty()
                 .filter {
@@ -155,7 +162,6 @@ private fun SourceGroup(
             emptyList()
         }
     }
-    var picking by remember { mutableStateOf(false) }
 
     val external = recordingSource.isNotEmpty()
     // A receiver unpaired since it was chosen has no name left; its address still names it.
@@ -169,7 +175,13 @@ private fun SourceGroup(
 
     ListItem(
         headlineContent = { Text("GPS device") },
-        modifier = Modifier.clickable { picking = true },
+        // Re-check too: the permission can be granted from the system settings page, where the
+        // launcher's callback never fires.
+        modifier = Modifier.clickable {
+            granted = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+            picking = true
+        },
         supportingContent = { Text(current) },
     )
 
@@ -180,6 +192,12 @@ private fun SourceGroup(
             devices = devices,
             granted = granted,
             onRequestPermission = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+            // Closing first is what makes the round trip work: the list is re-read on the next
+            // open, so the device just paired is there when the user comes back and taps again.
+            onPairDevice = {
+                picking = false
+                runCatching { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            },
             onSelect = {
                 onSelectSource(it)
                 picking = false
@@ -192,6 +210,10 @@ private fun SourceGroup(
 /**
  * The picker itself: the internal chipset plus every paired classic device. Scrolls, because the
  * list has no upper bound. Choosing a source applies it and closes, so Cancel is the only button.
+ *
+ * Exactly one note sits under the internal option when the list cannot be shown, and it carries
+ * the action that resolves it — the permission, or the pairing this app cannot do itself. On a
+ * device with no chipset that note is the only way forward, so it must never be silence.
  */
 @Composable
 private fun SourcePickerDialog(
@@ -200,6 +222,7 @@ private fun SourcePickerDialog(
     devices: List<Pair<String, String>>,
     granted: Boolean,
     onRequestPermission: () -> Unit,
+    onPairDevice: () -> Unit,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -220,20 +243,17 @@ private fun SourcePickerDialog(
                     onSelect = { onSelect("") },
                 )
                 if (!granted) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "Allow Bluetooth access to list paired receivers.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = onRequestPermission) { Text("Allow") }
-                    }
+                    PickerNote(
+                        text = "Allow Bluetooth access to list paired receivers.",
+                        action = "Allow",
+                        onAction = onRequestPermission,
+                    )
+                } else if (devices.isEmpty()) {
+                    PickerNote(
+                        text = "No paired receivers. Pair one in the system Bluetooth settings first.",
+                        action = "Pair",
+                        onAction = onPairDevice,
+                    )
                 }
                 devices.forEach { (name, mac) ->
                     SourceOption(
@@ -255,6 +275,25 @@ private fun SourcePickerDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** A line of explanation beside the one action that resolves it; the picker's two notes share it. */
+@Composable
+private fun PickerNote(text: String, action: String, onAction: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onAction) { Text(action) }
+    }
 }
 
 /**
