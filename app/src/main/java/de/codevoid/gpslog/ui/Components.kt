@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
@@ -60,18 +61,29 @@ internal fun ControlLabel(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
 }
 
-/** A surface's title row; there is no app bar. [trailing] sits at the end of the row. */
+/**
+ * A surface's title row; there is no app bar. [leading] is a 48 dp icon button (Back, Close) whose
+ * glyph then lands on the gutter; [trailing] sits at the end of the row.
+ */
 @Composable
-internal fun SurfaceHeader(title: String, trailing: @Composable RowScope.() -> Unit = {}) {
+internal fun SurfaceHeader(
+    title: String,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Row(
             modifier = Modifier
                 .widthIn(max = ContentMaxWidth)
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = Gutter),
+                .padding(start = if (leading != null) 4.dp else Gutter, end = Gutter),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (leading != null) {
+                leading()
+                Spacer(modifier = Modifier.width(4.dp))
+            }
             Text(title, style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.weight(1f))
             trailing()
