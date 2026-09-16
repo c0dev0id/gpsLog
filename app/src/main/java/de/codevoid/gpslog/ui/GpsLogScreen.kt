@@ -90,8 +90,9 @@ fun GpsLogScreen(
 
 /**
  * Stock navigation bar. The recording state rides on the Record item as a dot badge (error while
- * recording, tertiary while paused) and the selection count on the Export item as a number badge;
- * Export is disabled while nothing is selected.
+ * recording, the neutral outline while paused — dynamic tertiary can land on red for some
+ * wallpapers) and the selection count on the Export item as a number badge; Export is disabled
+ * while nothing is selected.
  */
 @Composable
 private fun GpsLogNavBar(
@@ -116,7 +117,7 @@ private fun GpsLogNavBar(
                         if (recording) {
                             Badge(
                                 containerColor = if (paused) {
-                                    MaterialTheme.colorScheme.tertiary
+                                    MaterialTheme.colorScheme.outline
                                 } else {
                                     MaterialTheme.colorScheme.error
                                 },

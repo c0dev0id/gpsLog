@@ -167,7 +167,7 @@ private fun ActiveTag(paused: Boolean) {
         Text(
             if (paused) "Paused" else "Recording",
             style = MaterialTheme.typography.labelMedium,
-            color = if (paused) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+            color = if (paused) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         )
     }
 }

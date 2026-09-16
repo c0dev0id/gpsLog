@@ -114,10 +114,10 @@ internal fun ActionTray(content: @Composable RowScope.() -> Unit) {
     }
 }
 
-/** The recording marker: error while recording, tertiary while paused. Callers add the word. */
+/** The recording marker: error while recording, the neutral outline while paused. Callers add the word. */
 @Composable
 internal fun RecordingDot(paused: Boolean, modifier: Modifier = Modifier, size: Dp = 10.dp) {
-    val color = if (paused) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+    val color = if (paused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
     Box(modifier = modifier.size(size).background(color, CircleShape))
 }
 

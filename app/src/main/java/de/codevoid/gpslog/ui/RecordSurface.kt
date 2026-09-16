@@ -111,7 +111,7 @@ internal fun RecordSurface(vm: MainViewModel, onOpenSettings: () -> Unit) {
 private fun statusColor(status: RecordStatus): Color = when (status) {
     RecordStatus.Fix -> MaterialTheme.colorScheme.primary
     RecordStatus.Idle, RecordStatus.Searching -> MaterialTheme.colorScheme.onSurface
-    RecordStatus.Paused -> MaterialTheme.colorScheme.tertiary
+    RecordStatus.Paused -> MaterialTheme.colorScheme.onSurfaceVariant
     RecordStatus.Unavailable, RecordStatus.Disabled, RecordStatus.ReceiverOff -> MaterialTheme.colorScheme.error
 }
 
