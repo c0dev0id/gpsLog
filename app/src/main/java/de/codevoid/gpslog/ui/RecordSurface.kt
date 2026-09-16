@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -92,6 +93,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
             onStop = vm::stop,
             onPause = vm::pause,
             onUnpause = vm::unpause,
+            wide = wide,
             spread = spread,
             modifier = modifier,
         )
@@ -192,6 +194,7 @@ private fun RecordPrimary(
     onStop: () -> Unit,
     onPause: () -> Unit,
     onUnpause: () -> Unit,
+    wide: Boolean,
     spread: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -225,6 +228,7 @@ private fun RecordPrimary(
             onStop = onStop,
             onPause = onPause,
             onUnpause = onUnpause,
+            wide = wide,
             modifier = Modifier.padding(top = 24.dp),
         )
     }
@@ -309,9 +313,15 @@ private fun RecordControls(
     onStop: () -> Unit,
     onPause: () -> Unit,
     onUnpause: () -> Unit,
+    wide: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = modifier
+            .widthIn(max = if (wide) WideControlsMaxWidth else Dp.Unspecified)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         val buttonModifier = Modifier
             .weight(1f)
             .height(ControlHeight)
@@ -320,11 +330,12 @@ private fun RecordControls(
                 ControlLabel("Start")
             }
         } else {
-            Button(
+            // Outlined, like Delete on the Runs tray: a filled error container made the heaviest
+            // thing on a screen that reports everything is fine the one button pressed least.
+            OutlinedButton(
                 onClick = onStop,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
                 ),
                 modifier = buttonModifier,
             ) {
