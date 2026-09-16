@@ -32,8 +32,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Content columns stop growing here so a tablet or landscape phone does not stretch the layout. */
+/** Single-column content stops growing here so a wide window does not stretch a list or a form. */
 internal val ContentMaxWidth = 600.dp
+
+/** Windows at least this wide (a phone in landscape, a tablet) get a navigation rail and two-column surfaces. */
+internal val WideWindowMinWidth = 600.dp
+
+/** Width cap for the two-column layouts of wide windows. */
+internal val WideContentMaxWidth = 840.dp
 
 /** Horizontal page margin. */
 internal val Gutter = 16.dp

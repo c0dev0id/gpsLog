@@ -1,7 +1,9 @@
 package de.codevoid.gpslog.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -18,6 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +31,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,10 +43,22 @@ private const val TAB_RUNS = 1
 private const val TAB_EXPORT = 2
 private const val TAB_SETTINGS = 3
 
+/** One top-level destination; the icon pair follows Material's filled-when-selected convention. */
+private class Destination(val index: Int, val label: String, val selectedIcon: ImageVector, val icon: ImageVector)
+
+private val destinations = listOf(
+    Destination(TAB_RECORD, "Record", Icons.Filled.LocationOn, Icons.Outlined.LocationOn),
+    Destination(TAB_RUNS, "Runs", Icons.AutoMirrored.Filled.List, Icons.AutoMirrored.Filled.List),
+    Destination(TAB_EXPORT, "Export", Icons.Filled.Share, Icons.Outlined.Share),
+    Destination(TAB_SETTINGS, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
+)
+
 /**
- * The one screen: four top-level surfaces behind a bottom navigation bar. The shell collects only
- * what the bar needs (the active run and the selection size); every surface collects its own flows,
- * so a logging-state tick recomposes the Record surface alone.
+ * The one screen: four top-level surfaces behind a navigation bar, or a navigation rail on the
+ * side once the window is [WideWindowMinWidth] or wider (a phone in landscape, a tablet), which
+ * also gives back the height the bar took. The shell collects only what the navigation needs (the
+ * active run and the selection size); every surface collects its own flows, so a logging-state
+ * tick recomposes the Record surface alone.
  */
 @Composable
 fun GpsLogScreen(
@@ -53,6 +71,10 @@ fun GpsLogScreen(
     val active by vm.activeRun.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(TAB_RECORD) }
+    val wide = LocalWindowInfo.current.containerDpSize.width >= WideWindowMinWidth
+    val recording = active != null
+    val paused = active?.paused == true
+    val exportCount = selected.size
 
     // Export is only reachable with a selection; a restored index lands on Runs when it is empty.
     LaunchedEffect(selected.isEmpty()) {
@@ -61,111 +83,99 @@ fun GpsLogScreen(
 
     Scaffold(
         bottomBar = {
-            GpsLogNavBar(
-                tab = tab,
-                onTab = { tab = it },
-                recording = active != null,
-                paused = active?.paused == true,
-                exportCount = selected.size,
-            )
+            if (!wide) {
+                NavigationBar {
+                    destinations.forEach { d ->
+                        NavigationBarItem(
+                            selected = tab == d.index,
+                            onClick = { tab = d.index },
+                            enabled = d.index != TAB_EXPORT || exportCount > 0,
+                            icon = { DestinationIcon(d, tab == d.index, recording, paused, exportCount) },
+                            label = { Text(d.label, maxLines = 1) },
+                        )
+                    }
+                }
+            }
         },
     ) { padding ->
         // Consuming the padded insets lets a surface's imePadding() measure from the bar, not the
         // window edge, so a pinned button row lands on the keyboard instead of a bar's height above it.
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
-            when (tab) {
-                TAB_RECORD -> RecordSurface(vm = vm, onOpenSettings = onOpenSettings)
-                TAB_RUNS -> RunsSurface(vm = vm, onGoToRecord = { tab = TAB_RECORD })
-                TAB_EXPORT -> ExportSurface(vm = vm, onShare = onShare)
-                else -> SettingsSurface(vm = vm, onShareDebugLog = onShareDebugLog, onInstall = onInstall)
+            if (wide) {
+                NavigationRail {
+                    destinations.forEach { d ->
+                        NavigationRailItem(
+                            selected = tab == d.index,
+                            onClick = { tab = d.index },
+                            enabled = d.index != TAB_EXPORT || exportCount > 0,
+                            icon = { DestinationIcon(d, tab == d.index, recording, paused, exportCount) },
+                            label = { Text(d.label, maxLines = 1) },
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            ) {
+                when (tab) {
+                    TAB_RECORD -> RecordSurface(vm = vm, wide = wide, onOpenSettings = onOpenSettings)
+                    TAB_RUNS -> RunsSurface(vm = vm, onGoToRecord = { tab = TAB_RECORD })
+                    TAB_EXPORT -> ExportSurface(vm = vm, wide = wide, onShare = onShare)
+                    else -> SettingsSurface(vm = vm, onShareDebugLog = onShareDebugLog, onInstall = onInstall)
+                }
             }
         }
     }
 }
 
 /**
- * Stock navigation bar. The recording state rides on the Record item as a dot badge (error while
+ * A destination's icon with its state badge: a dot on Record while a run is active (error while
  * recording, the neutral outline while paused — dynamic tertiary can land on red for some
- * wallpapers) and the selection count on the Export item as a number badge; Export is disabled
- * while nothing is selected.
+ * wallpapers) and the selection count on Export.
  */
 @Composable
-private fun GpsLogNavBar(
-    tab: Int,
-    onTab: (Int) -> Unit,
+private fun DestinationIcon(
+    destination: Destination,
+    selected: Boolean,
     recording: Boolean,
     paused: Boolean,
     exportCount: Int,
 ) {
-    NavigationBar {
-        NavigationBarItem(
-            selected = tab == TAB_RECORD,
-            onClick = { onTab(TAB_RECORD) },
-            icon = {
-                val description = when {
-                    !recording -> "Record"
-                    paused -> "Record, paused"
-                    else -> "Record, recording"
-                }
-                BadgedBox(
-                    badge = {
-                        if (recording) {
-                            Badge(
-                                containerColor = if (paused) {
-                                    MaterialTheme.colorScheme.outline
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                },
-                            )
-                        }
-                    },
-                    modifier = Modifier.semantics { contentDescription = description },
-                ) {
-                    Icon(
-                        if (tab == TAB_RECORD) Icons.Filled.LocationOn else Icons.Outlined.LocationOn,
-                        contentDescription = null,
-                    )
-                }
-            },
-            label = { Text("Record", maxLines = 1) },
-        )
-        NavigationBarItem(
-            selected = tab == TAB_RUNS,
-            onClick = { onTab(TAB_RUNS) },
-            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-            label = { Text("Runs", maxLines = 1) },
-        )
-        NavigationBarItem(
-            selected = tab == TAB_EXPORT,
-            onClick = { onTab(TAB_EXPORT) },
-            enabled = exportCount > 0,
-            icon = {
-                BadgedBox(
-                    badge = { if (exportCount > 0) Badge { Text("$exportCount") } },
-                ) {
-                    Icon(
-                        if (tab == TAB_EXPORT) Icons.Filled.Share else Icons.Outlined.Share,
-                        contentDescription = null,
-                    )
-                }
-            },
-            label = { Text("Export", maxLines = 1) },
-        )
-        NavigationBarItem(
-            selected = tab == TAB_SETTINGS,
-            onClick = { onTab(TAB_SETTINGS) },
-            icon = {
-                Icon(
-                    if (tab == TAB_SETTINGS) Icons.Filled.Settings else Icons.Outlined.Settings,
-                    contentDescription = null,
-                )
-            },
-            label = { Text("Settings", maxLines = 1) },
-        )
+    val icon: @Composable () -> Unit = {
+        Icon(if (selected) destination.selectedIcon else destination.icon, contentDescription = null)
+    }
+    when (destination.index) {
+        TAB_RECORD -> {
+            val description = when {
+                !recording -> "Record"
+                paused -> "Record, paused"
+                else -> "Record, recording"
+            }
+            BadgedBox(
+                badge = {
+                    if (recording) {
+                        Badge(
+                            containerColor = if (paused) {
+                                MaterialTheme.colorScheme.outline
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        )
+                    }
+                },
+                modifier = Modifier.semantics { contentDescription = description },
+            ) {
+                icon()
+            }
+        }
+        TAB_EXPORT -> BadgedBox(badge = { if (exportCount > 0) Badge { Text("$exportCount") } }) { icon() }
+        else -> icon()
     }
 }

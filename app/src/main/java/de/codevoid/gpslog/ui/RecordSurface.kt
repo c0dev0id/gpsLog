@@ -40,12 +40,13 @@ import java.util.Locale
 /**
  * Start/stop/pause and the live state. A status word leads, so "is it recording and does it have
  * a fix" reads at arm's length; six tabular-numeral tiles carry the details and stay mounted while
- * idle (every value is a dash) so nothing jumps on Start. This is the only surface that collects
- * [MainViewModel.loggingState]; its children take Strings and Booleans, so a 2 s tick recomposes
- * only the tiles whose text changed.
+ * idle (every value is a dash) so nothing jumps on Start. In a wide window the status and controls
+ * sit beside the tiles instead of above them, so a phone in landscape shows everything at once.
+ * This is the only surface that collects [MainViewModel.loggingState]; its children take Strings
+ * and Booleans, so a 2 s tick recomposes only the tiles whose text changed.
  */
 @Composable
-internal fun RecordSurface(vm: MainViewModel, onOpenSettings: () -> Unit) {
+internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () -> Unit) {
     val state by vm.loggingState.collectAsStateWithLifecycle()
     val preciseLocation by vm.preciseLocation.collectAsStateWithLifecycle()
     val recordingSource by vm.recordingSource.collectAsStateWithLifecycle()
@@ -58,52 +59,107 @@ internal fun RecordSurface(vm: MainViewModel, onOpenSettings: () -> Unit) {
     val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
     val accuracy = state.accuracyMeters
 
+    val primary: @Composable (Modifier) -> Unit = { modifier ->
+        RecordPrimary(
+            preciseLocation = preciseLocation,
+            onOpenSettings = onOpenSettings,
+            word = status.label,
+            wordColor = statusColor(status),
+            subtitle = recordSubtitle(status, external, state.startTimeMillis, state.lastFixTimeMillis, f),
+            isLogging = state.isLogging,
+            isPaused = state.isPaused,
+            onStart = vm::start,
+            onStop = vm::stop,
+            onPause = vm::pause,
+            onUnpause = vm::unpause,
+            modifier = modifier,
+        )
+    }
+    val stats: @Composable (Modifier) -> Unit = { modifier ->
+        StatsGrid(
+            satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
+            satellitesVisible = state.satellitesVisible.toString(),
+            accuracy = if (live) f.decimal(accuracy) else DASH,
+            accuracyOverLimit = live && accuracy != null && accuracy > filters.accuracyMeters,
+            points = if (state.isLogging) f.count(state.pointCount) else DASH,
+            rate = if (live) f.decimal(state.updateRateHz) else DASH,
+            speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
+            gpsTime = if (state.isLogging) f.clock(state.lastFixTimeMillis) else DASH,
+            modifier = modifier,
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = ContentMaxWidth)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(Gutter),
-        ) {
-            AnimatedVisibility(
-                visible = !preciseLocation,
-                enter = RevealEnter,
-                exit = RevealExit,
+        if (wide) {
+            Row(
+                modifier = Modifier
+                    .widthIn(max = WideContentMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Gutter),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                PreciseLocationBanner(
-                    onOpenSettings = onOpenSettings,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                )
+                primary(Modifier.weight(1f))
+                stats(Modifier.weight(1f))
             }
-            StateHero(
-                word = status.label,
-                wordColor = statusColor(status),
-                subtitle = recordSubtitle(status, external, state.startTimeMillis, state.lastFixTimeMillis, f),
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            RecordControls(
-                isLogging = state.isLogging,
-                isPaused = state.isPaused,
-                canStart = preciseLocation,
-                onStart = vm::start,
-                onStop = vm::stop,
-                onPause = vm::pause,
-                onUnpause = vm::unpause,
-                modifier = Modifier.padding(top = 24.dp),
-            )
-            StatsGrid(
-                satellitesUsed = if (live) state.satellitesUsedInFix.toString() else DASH,
-                satellitesVisible = state.satellitesVisible.toString(),
-                accuracy = if (live) f.decimal(accuracy) else DASH,
-                accuracyOverLimit = live && accuracy != null && accuracy > filters.accuracyMeters,
-                points = if (state.isLogging) f.count(state.pointCount) else DASH,
-                rate = if (live) f.decimal(state.updateRateHz) else DASH,
-                speed = if (live) f.decimal(state.speedMetersPerSecond) else DASH,
-                gpsTime = if (state.isLogging) f.clock(state.lastFixTimeMillis) else DASH,
-                modifier = Modifier.padding(top = 16.dp),
+        } else {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = ContentMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Gutter),
+            ) {
+                primary(Modifier)
+                stats(Modifier.padding(top = 16.dp))
+            }
+        }
+    }
+}
+
+/** The banner, the status hero and the controls — the half of the surface that is not the tiles. */
+@Composable
+private fun RecordPrimary(
+    preciseLocation: Boolean,
+    onOpenSettings: () -> Unit,
+    word: String,
+    wordColor: Color,
+    subtitle: String,
+    isLogging: Boolean,
+    isPaused: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onUnpause: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        AnimatedVisibility(
+            visible = !preciseLocation,
+            enter = RevealEnter,
+            exit = RevealExit,
+        ) {
+            PreciseLocationBanner(
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.padding(bottom = 16.dp),
             )
         }
+        StateHero(
+            word = word,
+            wordColor = wordColor,
+            subtitle = subtitle,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        RecordControls(
+            isLogging = isLogging,
+            isPaused = isPaused,
+            canStart = preciseLocation,
+            onStart = onStart,
+            onStop = onStop,
+            onPause = onPause,
+            onUnpause = onUnpause,
+            modifier = Modifier.padding(top = 24.dp),
+        )
     }
 }
 

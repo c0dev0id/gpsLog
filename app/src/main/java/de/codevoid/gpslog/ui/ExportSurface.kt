@@ -44,16 +44,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.codevoid.gpslog.data.FilterSettings
 import java.time.ZoneId
 import java.util.Locale
 
 /**
  * The selection's export: a summary, the accuracy/distance/time filters, a live preview of the
  * filtered result and one Export action that hands the GPX to the system share sheet (saving to
- * disk is sharing to a file manager). Only reachable with a selection; the navigation bar gates it.
+ * disk is sharing to a file manager). Only reachable with a selection; the navigation gates it.
+ * In a wide window the filters sit beside the result.
  */
 @Composable
-internal fun ExportSurface(vm: MainViewModel, onShare: () -> Unit) {
+internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit) {
     val selected by vm.selected.collectAsStateWithLifecycle()
     val runs by vm.runs.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
@@ -73,7 +75,7 @@ internal fun ExportSurface(vm: MainViewModel, onShare: () -> Unit) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .widthIn(max = ContentMaxWidth)
+                .widthIn(max = if (wide) WideContentMaxWidth else ContentMaxWidth)
                 .fillMaxWidth()
                 .align(Alignment.CenterHorizontally)
                 .verticalScroll(rememberScrollState())
@@ -89,55 +91,23 @@ internal fun ExportSurface(vm: MainViewModel, onShare: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            SectionHeader("Filters")
-            Panel {
-                FilterRow(
-                    name = "Accuracy",
-                    helper = "Drop fixes worse than this",
-                    errorHelper = "Enter 1–999",
-                    value = filters.accuracyMeters,
-                    format = { filterText(it) },
-                    parse = { parseIntIn(it, 1..999) },
-                    onCommit = vm::setAccuracyMeters,
-                    unit = "m",
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next,
-                )
-                FilterRow(
-                    name = "Distance",
-                    helper = "Minimum spacing between points · 0 = off",
-                    errorHelper = "Enter 0–999.9",
-                    value = filters.distanceMeters,
-                    format = { filterText(it) },
-                    parse = { parseDistance(it) },
-                    onCommit = vm::setDistanceMeters,
-                    unit = "m",
-                    keyboardType = KeyboardType.Decimal,
-                    imeAction = ImeAction.Next,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-                FilterRow(
-                    name = "Time",
-                    // PointFilter's rule: a distance decides on its own; time only governs cadence
-                    // without one. The field stays enabled so time can be set before clearing distance.
-                    helper = if (filters.distanceMeters > 0f) {
-                        "Ignored while a distance is set"
-                    } else {
-                        "Minimum interval between points · 0 = off"
-                    },
-                    errorHelper = "Enter 0–999",
-                    value = filters.timeSeconds,
-                    format = { filterText(it) },
-                    parse = { parseIntIn(it, 0..999) },
-                    onCommit = vm::setTimeSeconds,
-                    unit = "s",
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
+            if (wide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        SectionHeader("Filters")
+                        FiltersPanel(filters, vm::setAccuracyMeters, vm::setDistanceMeters, vm::setTimeSeconds)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        SectionHeader("Result")
+                        ResultPanel(preview = preview, f = f)
+                    }
+                }
+            } else {
+                SectionHeader("Filters")
+                FiltersPanel(filters, vm::setAccuracyMeters, vm::setDistanceMeters, vm::setTimeSeconds)
+                SectionHeader("Result")
+                ResultPanel(preview = preview, f = f)
             }
-            SectionHeader("Result")
-            ResultPanel(preview = preview, f = f)
         }
         ActionTray {
             Button(
@@ -152,6 +122,62 @@ internal fun ExportSurface(vm: MainViewModel, onShare: () -> Unit) {
                 ControlLabel("Export GPX")
             }
         }
+    }
+}
+
+/** The three persisted filters; a valid entry commits at once and the preview follows. */
+@Composable
+private fun FiltersPanel(
+    filters: FilterSettings,
+    onAccuracy: (Int) -> Unit,
+    onDistance: (Float) -> Unit,
+    onTime: (Int) -> Unit,
+) {
+    Panel {
+        FilterRow(
+            name = "Accuracy",
+            helper = "Drop fixes worse than this",
+            errorHelper = "Enter 1–999",
+            value = filters.accuracyMeters,
+            format = { filterText(it) },
+            parse = { parseIntIn(it, 1..999) },
+            onCommit = onAccuracy,
+            unit = "m",
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Next,
+        )
+        FilterRow(
+            name = "Distance",
+            helper = "Minimum spacing between points · 0 = off",
+            errorHelper = "Enter 0–999.9",
+            value = filters.distanceMeters,
+            format = { filterText(it) },
+            parse = { parseDistance(it) },
+            onCommit = onDistance,
+            unit = "m",
+            keyboardType = KeyboardType.Decimal,
+            imeAction = ImeAction.Next,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        FilterRow(
+            name = "Time",
+            // PointFilter's rule: a distance decides on its own; time only governs cadence
+            // without one. The field stays enabled so time can be set before clearing distance.
+            helper = if (filters.distanceMeters > 0f) {
+                "Ignored while a distance is set"
+            } else {
+                "Minimum interval between points · 0 = off"
+            },
+            errorHelper = "Enter 0–999",
+            value = filters.timeSeconds,
+            format = { filterText(it) },
+            parse = { parseIntIn(it, 0..999) },
+            onCommit = onTime,
+            unit = "s",
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Done,
+            modifier = Modifier.padding(top = 12.dp),
+        )
     }
 }
 
