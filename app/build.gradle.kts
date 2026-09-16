@@ -61,7 +61,9 @@ kotlin {
 dependencies {
     // The Compose BOM only manages the androidx.compose.* groups, so
     // activity-compose and lifecycle need explicit versions.
-    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
+    // Newest BOM whose artifacts compile against SDK 36: from 2026.08.00 on (Compose 1.12)
+    // they require compileSdk 37, which needs AGP 9.4 or later.
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.ui:ui")
@@ -69,8 +71,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     // The navigation bar and list rows use the core icon set; material3 does not expose it.
     implementation("androidx.compose.material:material-icons-core")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

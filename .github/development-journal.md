@@ -3,7 +3,7 @@
 ## Software Stack
 
 - **Language:** Kotlin
-- **UI:** Jetpack Compose (Material3), Compose BOM 2026.09.00
+- **UI:** Jetpack Compose (Material3), Compose BOM 2026.06.01 (Compose 1.11.4, Material 3 1.4.0, material-icons-core 1.7.8)
 - **Min SDK:** 34 (Android 14)
 - **Target/Compile SDK:** 36
 - **Location:** platform `LocationManager` + `GPS_PROVIDER` (no Play Services / FusedLocationProvider); optional external classic-Bluetooth GNSS receiver over SPP/NMEA
@@ -15,6 +15,9 @@
 
 **AGP 9's built-in Kotlin support is used; no separate `kotlin-android` plugin.**
 AGP 9.1 registers the `compileDebugKotlin` task and the `kotlin { }` extension on its own, so only `com.android.application` and the Compose compiler plugin are applied.
+
+**The Compose BOM is the newest one that compiles against SDK 36; lifecycle 2.10 for the same reason.**
+Compose 1.12 (BOM 2026.08.00 and later) and lifecycle 2.11 declare `minCompileSdk=37`, and AGP 9.1.0's maximum compile SDK is 36, so the September 2026 BOM broke every CI job at the AAR-metadata check. BOM 2026.06.01 (Compose 1.11.4; Material 3 stays 1.4.0, so the UI code is unaffected) and lifecycle 2.10.0 are the last releases with `minCompileSdk=35`. Moving past them is a toolchain task — AGP 9.4+, compileSdk/targetSdk 37 and the matching Kotlin/Compose-compiler plugin — that has to be verified in CI on its own, not folded into a UI change. `material-icons-core` is declared explicitly: material3 depends on it only at runtime, so `Icons.*` does not resolve without it.
 
 **Non-Compose AndroidX dependencies carry explicit versions.**
 `androidx.compose:compose-bom` only constrains the `androidx.compose.*` groups. `androidx.activity:activity-compose` is pinned explicitly.
