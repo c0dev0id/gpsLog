@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -55,10 +56,19 @@ internal val ControlHeight = 56.dp
 internal val RevealEnter: EnterTransition = expandVertically() + fadeIn()
 internal val RevealExit: ExitTransition = shrinkVertically() + fadeOut()
 
-/** Label of a [ControlHeight] button: one step up from the button default so it reads at 56 dp. */
+/**
+ * Label of a [ControlHeight] button: one step up from the button default so it reads at 56 dp.
+ * One line only — a word broken across two lines would be clipped by the button's height.
+ */
 @Composable
 internal fun ControlLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium)
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /**

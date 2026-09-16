@@ -212,11 +212,11 @@ private fun ActiveTag(paused: Boolean) {
 /**
  * Destructive verb on the left, away from the right thumb; Export, the common verb, under it.
  * Merge is lossless, so it asks nothing. The header carries the count, so the labels do not; the
- * text-button padding is what lets three labels share a 360 dp phone.
+ * narrow padding is what lets three labels share a 360 dp phone at large font sizes.
  */
 @Composable
 private fun SelectionTray(actionable: Int, onDelete: () -> Unit, onMerge: () -> Unit, onExport: () -> Unit) {
-    val padding = ButtonDefaults.TextButtonContentPadding
+    val padding = PaddingValues(horizontal = 8.dp)
     ActionTray {
         OutlinedButton(
             onClick = onDelete,
