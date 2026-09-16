@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark first frame before Compose draws; the light variant lives in values/themes.xml. -->
-    <style name="Theme.App" parent="android:Theme.Material.NoActionBar" />
+    <!-- Dark first frame; the light variant lives in values/themes.xml. -->
+    <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/system_background_dark</item>
+    </style>
 </resources>
