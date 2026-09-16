@@ -103,6 +103,10 @@ class LoggingService : Service(), FixSink {
     }
 
     private fun beginForegroundAndLog(newRun: Boolean) {
+        // Before the id is computed, not after: a second ACTION_START — a double tap on an
+        // undebounced button, or a redelivered intent — used to repoint the active-run marker at
+        // an id nothing ever writes, and clear the paused flag of the run still in flight.
+        if (running) return
         val id = if (newRun) {
             System.currentTimeMillis().also { settings.setActiveRun(it) }
         } else {
@@ -112,7 +116,6 @@ class LoggingService : Service(), FixSink {
             stopSelf()
             return
         }
-        if (running) return
         running = true
         val notification = buildNotification(getString(R.string.notif_starting))
         try {
@@ -123,6 +126,10 @@ class LoggingService : Service(), FixSink {
             // additionally needs ACCESS_BACKGROUND_LOCATION. The platform answers a shortfall by
             // throwing, and Service.startForeground swallows only RemoteException, so it surfaced
             // here on the main thread; with the marker outliving it, every boot died the same way.
+            // RuntimeException is the right width: the background-start refusals arrive as
+            // ForegroundServiceStartNotAllowedException, not SecurityException. Swallowing is safe
+            // — the "did not call startForeground" ANR timer is cleared before the type is
+            // validated, so catching cannot leave it armed.
             Log.w(TAG, "foreground service refused; not logging", e)
             running = false
             // A run that never began leaves no marker behind; an interrupted one keeps its own, so
