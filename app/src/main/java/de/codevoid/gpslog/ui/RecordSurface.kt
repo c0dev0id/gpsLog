@@ -234,11 +234,11 @@ private fun StatsGrid(
             StatTile(
                 label = "Satellites in use",
                 value = satellitesUsed,
-                unit = "of $satellitesVisible visible",
+                unit = "of $satellitesVisible",
                 modifier = Modifier.weight(1f),
             )
             StatTile(
-                label = if (accuracyOverLimit) "Accuracy · over export limit" else "Accuracy",
+                label = if (accuracyOverLimit) "Accuracy · over limit" else "Accuracy",
                 value = accuracy,
                 unit = "m",
                 alert = accuracyOverLimit,
@@ -266,7 +266,10 @@ private fun StatsGrid(
     }
 }
 
-/** One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). */
+/**
+ * One label over one numeral. TalkBack reads the tile as a single node ("Rate, 1.0 Hz"). The label
+ * may take a second line only in the alert state, so the idle grid never grows.
+ */
 @Composable
 private fun StatTile(
     label: String,
@@ -280,7 +283,7 @@ private fun StatTile(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+            maxLines = if (alert) 2 else 1,
             overflow = TextOverflow.Ellipsis,
         )
         ValueWithUnit(
@@ -288,7 +291,7 @@ private fun StatTile(
             unit = unit,
             valueStyle = MaterialTheme.typography.headlineSmall,
             valueColor = when {
-                value == DASH -> MaterialTheme.colorScheme.outlineVariant
+                value == DASH -> MaterialTheme.colorScheme.outline
                 alert -> MaterialTheme.colorScheme.error
                 else -> MaterialTheme.colorScheme.onSurface
             },

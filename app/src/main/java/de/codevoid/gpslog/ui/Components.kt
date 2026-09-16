@@ -144,6 +144,8 @@ internal fun ValueWithUnit(
                 unit,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier
                     .alignByBaseline()
                     .padding(start = 4.dp),
