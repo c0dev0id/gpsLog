@@ -1,10 +1,8 @@
 # gpsLog
 
-An Android GPS logger for people who want the raw track and nothing else. A
+An Android GPS logger for people who want the raw track and nothing else: a
 foreground service records fixes at the receiver's native rate and exports them
-as GPX. Built for the owner's own devices.
-
-Requires Android 14 (API 34) or newer.
+as GPX. Built for the owner's own devices, Android 14 (API 34) or newer.
 
 ## Features
 
@@ -18,7 +16,7 @@ Requires Android 14 (API 34) or newer.
 
 ## Screens
 
-The app is one screen with three destinations plus an export page.
+One screen, three destinations, plus an export page opened on demand.
 
 | Screen | Purpose |
 |---|---|
