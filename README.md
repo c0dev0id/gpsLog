@@ -24,30 +24,3 @@ One screen, three destinations, plus an export page opened on demand.
 | Runs | List past runs, select, delete, merge, export |
 | Settings | Pick the GPS device, debug log, updater |
 | Export | Filter and share a run as GPX (opened from Record or Runs) |
-
-## Permissions
-
-| Permission | Why |
-|---|---|
-| Precise location | Mandatory — coarse fixes are fuzzed and throttled |
-| Background location | Keeps recording when the app is backgrounded |
-| Bluetooth connect | Only when you pick an external receiver |
-| Install packages | For the in-app updater (GitHub distribution) |
-
-## Getting started
-
-1. Install the latest APK from the [`dev` pre-release](../../releases/tag/dev).
-2. Grant precise location and allow the battery-optimization exemption on launch.
-3. On Record, press Start. For an external receiver, pick it under Settings first.
-4. Stop the run, then tap it to open its Export page and share the GPX.
-
-## Build
-
-Builds run in CI; AGP is not available for local builds.
-
-| Workflow | Trigger | Outcome |
-|---|---|---|
-| Build | Push to `main` | Lint, unit tests, signed APK published as the rolling `dev` pre-release |
-| Release | Manual dispatch | Signed APK, a version tag and a draft GitHub release |
-
-The signed APK depends on the `SIGNING_*` repository secrets being set.
