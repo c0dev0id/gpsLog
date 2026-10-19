@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0B1E4A"/>
+    </linearGradient>
+    <linearGradient id="gridFade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="gridMask">
+      <rect x="400" width="400" height="200" fill="url(#gridFade)"/>
+    </mask>
+    <clipPath id="frame">
+      <rect width="800" height="200" rx="16"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <!-- Background, same gradient as the launcher icon -->
+    <rect width="800" height="200" fill="url(#bgGrad)"/>
+
+    <!-- Graticule (right side), fading in from the left -->
+    <g mask="url(#gridMask)" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1" fill="none">
+      <path d="M440,0V200 M490,0V200 M540,0V200 M590,0V200 M640,0V200 M690,0V200 M740,0V200"/>
+      <path d="M400,25H800 M400,75H800 M400,125H800 M400,175H800"/>
+    </g>
+  </g>
+
+  <!-- Launcher glyph: logged track, logged points, current position -->
+  <g transform="translate(-2.6, -26.6) scale(2.4)">
+    <path d="M28,74 C32,54 44,42 54,50 C62,58 66,62 78,36" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M23.5,74.0 a4.5,4.5 0 1,0 9.0,0 a4.5,4.5 0 1,0 -9.0,0z M28.8,58.9 a4.5,4.5 0 1,0 9.0,0 a4.5,4.5 0 1,0 -9.0,0z M40.0,47.9 a4.5,4.5 0 1,0 9.0,0 a4.5,4.5 0 1,0 -9.0,0z M53.8,54.1 a4.5,4.5 0 1,0 9.0,0 a4.5,4.5 0 1,0 -9.0,0z M66.5,49.2 a4.5,4.5 0 1,0 9.0,0 a4.5,4.5 0 1,0 -9.0,0z" fill="#FFFFFF"/>
+    <path d="M69.0,36.0 a9.0,9.0 0 1,0 18.0,0 a9.0,9.0 0 1,0 -18.0,0z" fill="#FFFFFF"/>
+    <path d="M72.5,36.0 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0z" fill="#19E0BE"/>
+  </g>
+
+  <!-- App name -->
+  <text x="240" y="100" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="72" fill="#FFFFFF" letter-spacing="1">gpsLog</text>
+
+  <!-- Accent underline -->
+  <rect x="242" y="124" width="120" height="3" rx="1.5" fill="#19E0BE" opacity="0.9"/>
+
+  <!-- Tagline -->
+  <text x="242" y="156" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="400" font-size="20" fill="#C7D7F5">Raw GPS tracks at native rate, exported as GPX</text>
+</svg>

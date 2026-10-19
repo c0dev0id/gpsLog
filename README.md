@@ -1,4 +1,6 @@
-# gpsLog
+<p align="center">
+  <img src="docs/banner.svg" alt="gpsLog" width="100%"/>
+</p>
 
 An Android GPS logger for people who want the raw track and nothing else: a
 foreground service records fixes at the receiver's native rate and exports them
