@@ -106,6 +106,14 @@ key as the installed build.
   Kotlin tasks and the `kotlin { }` extension itself.
 - The Compose BOM only manages `androidx.compose.*`. Any other AndroidX
   dependency (`activity-compose`, `lifecycle-*`) needs an explicit version.
+- **Dependency ceiling: compileSdk 36.** AGP 9.1.0 compiles against SDK 36 at
+  most, and Compose BOM 2026.08.00+ (Compose 1.12) and lifecycle 2.11+ declare
+  `minCompileSdk=37`, so the newest versions that build are BOM 2026.06.01
+  (Compose 1.11.4, Material 3 1.4.0) and lifecycle 2.10.0. Bumping past them
+  fails every CI job at the AAR-metadata check. Moving on is a toolchain task
+  of its own — AGP 9.4+, compileSdk/targetSdk 37 and the matching Kotlin and
+  Compose-compiler plugins — verified in CI alone, never folded into a feature
+  change.
 
 ### Recording sources: the `FixSink` seam
 
@@ -236,6 +244,11 @@ BluetoothNmea ───┘            │
 - The service **writes** `LoggingStateHolder`; the ViewModel only collects.
   Commands go the other way as fire-and-forget intents (`vm.start()` →
   `LoggingService.start`). No Binder, no bound service.
+- A refusal (foreground service denied, source not acquired) writes no reason
+  into the holder, so Record's idle words come from the ViewModel asking the
+  platform the same questions itself. That duplication is a known gap; the
+  planned fix is a refusal reason on `LoggingState`, mapped in
+  `recordStatus`/`recordSubtitle`.
 - `LoggingState` does not survive process death. "Is a run active" is
   authoritative in `SettingsStore` (`SharedPreferences`), not in the holder.
 - `SettingsStore` owns the three export filters, the recording source and the
@@ -413,9 +426,9 @@ Play, fine for GitHub distribution) and `INTERNET` — the app's only network us
 - Update `CHANGELOG.md` (keep-a-changelog) after each task with user-facing
   changes only; update `.github/development-journal.md` when a decision or
   stack fact changes.
-- Always use the latest available library versions. Before hand-rolling a
-  feature, check whether the platform or a dependency already provides it and
-  present that option.
+- Use the latest library versions that build under the dependency ceiling in
+  Platform constraints. Before hand-rolling a feature, check whether the
+  platform or a dependency already provides it and present that option.
 
 ## Git
 
