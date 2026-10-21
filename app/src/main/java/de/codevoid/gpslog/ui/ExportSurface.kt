@@ -48,8 +48,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.codevoid.gpslog.data.FilterSettings
-import java.time.ZoneId
-import java.util.Locale
 
 /**
  * The Export page for the runs in [MainViewModel.exportTarget]: what is being exported, the
@@ -64,7 +62,7 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
     val runs by vm.runs.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
     val preview by vm.exportPreview.collectAsStateWithLifecycle()
-    val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
+    val f = rememberFormats()
     val chosen = remember(runs, target) { runs.filter { it.id in target } }
     // One run reads as that run's page; several read as a count.
     val one = chosen.singleOrNull()
@@ -103,7 +101,7 @@ internal fun ExportSurface(vm: MainViewModel, wide: Boolean, onShare: () -> Unit
             )
             Text(
                 if (one != null) {
-                    f.runSubtitle(one.endTimeMillis - one.startTimeMillis, one.pointCount)
+                    f.runSubtitle(one.durationMillis, one.pointCount)
                 } else {
                     f.plural(chosen.sumOf { it.pointCount }, "raw point", "raw points")
                 },

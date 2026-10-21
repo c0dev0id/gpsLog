@@ -172,15 +172,7 @@ private fun DestinationIcon(
         }
         BadgedBox(
             badge = {
-                if (recording) {
-                    Badge(
-                        containerColor = if (paused) {
-                            MaterialTheme.colorScheme.outline
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                    )
-                }
+                if (recording) Badge(containerColor = markerColor(paused))
             },
             modifier = Modifier.semantics { contentDescription = description },
         ) {

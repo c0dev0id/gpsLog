@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,8 +43,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.ZoneId
-import java.util.Locale
 
 /**
  * Start/stop/pause and the live state. A status word leads, so "is it recording and does it have
@@ -71,12 +68,13 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
     val internalGpsEnabled by vm.internalGpsEnabled.collectAsStateWithLifecycle()
     // Emits only on a refresh (resume, delete/merge, a run starting or ending), never on a fix.
     val runs by vm.runs.collectAsStateWithLifecycle()
-    val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
+    val f = rememberFormats()
 
     val external = recordingSource.isNotEmpty()
     val status = recordStatus(state, external, preciseLocation, vm.hasInternalGps, internalGpsEnabled)
-    // Receiver-dependent values mean nothing unless the source is actually delivering.
-    val live = state.isLogging && !state.isPaused && state.gpsEnabled && state.gnssRunning
+    // Receiver-dependent values mean nothing unless the source is actually delivering, which is
+    // exactly the two statuses a delivering source produces.
+    val live = status == RecordStatus.Fix || status == RecordStatus.Searching
 
     // The values are worth the whole window only while they are moving.
     val spread = wide && state.isLogging
@@ -124,7 +122,7 @@ internal fun RecordSurface(vm: MainViewModel, wide: Boolean, onOpenSettings: () 
         } else if (latest != null) {
             LatestRunRow(
                 title = f.runTitle(latest.startTimeMillis),
-                subtitle = f.runSubtitle(latest.endTimeMillis - latest.startTimeMillis, latest.pointCount),
+                subtitle = f.runSubtitle(latest.durationMillis, latest.pointCount),
                 onExport = { vm.openExport(setOf(latest.id)) },
                 modifier = modifier,
             )

@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +34,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import java.time.ZoneId
+import java.util.Locale
 
 /** Single-column content stops growing here so a wide window does not stretch a list or a form. */
 internal val ContentMaxWidth = 600.dp
@@ -159,11 +162,22 @@ internal fun ActionTray(maxWidth: Dp = ContentMaxWidth, content: @Composable Row
     }
 }
 
-/** The recording marker: error while recording, the neutral outline while paused. Callers add the word. */
+/** One per surface: locale- and zone-aware formatting, built once and handed down as Strings. */
+@Composable
+internal fun rememberFormats(): Formats = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
+
+/**
+ * The recording marker's colour: error while recording, the neutral outline while paused. Never
+ * dynamic tertiary, which lands on red for some wallpapers and would make the two identical.
+ */
+@Composable
+internal fun markerColor(paused: Boolean): Color =
+    if (paused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
+
+/** The recording marker. Callers add the word. */
 @Composable
 internal fun RecordingDot(paused: Boolean, modifier: Modifier = Modifier, size: Dp = 10.dp) {
-    val color = if (paused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
-    Box(modifier = modifier.size(size).background(color, CircleShape))
+    Box(modifier = modifier.size(size).background(markerColor(paused), CircleShape))
 }
 
 /** A numeral with its unit hung off the same baseline; the unit is dropped while the value is a dash. */

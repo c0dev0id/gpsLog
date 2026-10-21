@@ -47,8 +47,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.ZoneId
-import java.util.Locale
 
 /**
  * The past runs, newest first, following the platform list idiom: a tap opens the run's Export
@@ -63,7 +61,7 @@ internal fun RunsSurface(vm: MainViewModel, listState: LazyListState, onGoToReco
     val runs by vm.runs.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val active by vm.activeRun.collectAsStateWithLifecycle()
-    val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
+    val f = rememberFormats()
 
     val activeId = active?.id
     val activePaused = active?.paused == true
@@ -121,7 +119,7 @@ internal fun RunsSurface(vm: MainViewModel, listState: LazyListState, onGoToReco
                     Column {
                         RunRow(
                             title = f.runTitle(run.startTimeMillis),
-                            subtitle = f.runSubtitle(run.endTimeMillis - run.startTimeMillis, run.pointCount),
+                            subtitle = f.runSubtitle(run.durationMillis, run.pointCount),
                             selecting = selecting,
                             isSelected = run.id in selected,
                             active = run.id == activeId,

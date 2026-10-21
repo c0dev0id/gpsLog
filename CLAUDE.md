@@ -362,7 +362,8 @@ lay out in two columns capped at `WideContentMaxWidth` (840 dp).
 
 `ui/Components.kt` holds the shared pieces: `SurfaceHeader`, `SectionHeader`,
 `Panel` (`surfaceContainerLow`), `ActionTray` (`surfaceContainer`),
-`RecordingDot`, `ValueWithUnit`, `ControlLabel`, `RevealEnter`/`RevealExit`,
+`RecordingDot`, `markerColor`, `rememberFormats`, `ValueWithUnit`, `ControlLabel`,
+`RevealEnter`/`RevealExit`,
 `ContentMaxWidth` (600 dp), `WideWindowMinWidth`, `WideContentMaxWidth`,
 `WideContentMaxHeight`, `TileGap`, `WideControlsMaxWidth`,
 `Gutter`, `ControlHeight`. The recording marker is `error`; paused is the

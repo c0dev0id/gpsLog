@@ -9,7 +9,9 @@ data class RunInfo(
     val startTimeMillis: Long,
     val endTimeMillis: Long,
     val pointCount: Long,
-)
+) {
+    val durationMillis: Long get() = endTimeMillis - startTimeMillis
+}
 
 /**
  * Owns the runs directory. Each run is one `<id>.dat` file where the id is the run's start time in

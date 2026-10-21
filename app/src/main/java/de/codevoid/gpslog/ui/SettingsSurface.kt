@@ -52,7 +52,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
-import java.time.ZoneId
 import java.util.Locale
 
 /** One phrase for the missing chipset, so the row and the picker agree word for word. */
@@ -75,7 +74,7 @@ internal fun SettingsSurface(vm: MainViewModel, onShareDebugLog: () -> Unit, onI
     val debugLogging by vm.debugLogging.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val latestDebugLog by vm.latestDebugLog.collectAsStateWithLifecycle()
-    val f = remember { Formats(Locale.getDefault(), ZoneId.systemDefault()) }
+    val f = rememberFormats()
 
     Column(modifier = Modifier.fillMaxSize()) {
         SurfaceHeader("Settings")
@@ -133,12 +132,9 @@ private fun SourceGroup(
     onSelectSource: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    var granted by remember {
-        mutableStateOf(
-            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                PackageManager.PERMISSION_GRANTED
-        )
-    }
+    fun hasBluetoothConnect() =
+        context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    var granted by remember { mutableStateOf(hasBluetoothConnect()) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted = it }
@@ -178,8 +174,7 @@ private fun SourceGroup(
         // Re-check too: the permission can be granted from the system settings page, where the
         // launcher's callback never fires.
         modifier = Modifier.clickable {
-            granted = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                PackageManager.PERMISSION_GRANTED
+            granted = hasBluetoothConnect()
             picking = true
         },
         supportingContent = { Text(current) },

@@ -111,8 +111,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * platform's `PROVIDERS_CHANGED` broadcast while it is started; otherwise Start would stay
      * greyed out for a user who had just done exactly what the subtitle asked.
      */
-    private val _internalGpsEnabled =
-        MutableStateFlow(hasInternalGps && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
+    private val _internalGpsEnabled = MutableStateFlow(readInternalGpsEnabled())
     val internalGpsEnabled = _internalGpsEnabled.asStateFlow()
 
     /** e.g. `dev-abc1234` for a nightly, `0.0.1` for a tagged/local build. */
@@ -172,11 +171,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _preciseLocation.value = granted
     }
 
-    /** Called from `onResume`: Location can be switched off while the app is in the background. */
+    /** Called from `onResume` and the `PROVIDERS_CHANGED` receiver: Location is switched outside the app. */
     fun refreshInternalGpsEnabled() {
-        _internalGpsEnabled.value =
-            hasInternalGps && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        _internalGpsEnabled.value = readInternalGpsEnabled()
     }
+
+    /** False for an absent provider too, by `isProviderEnabled`'s contract; presence is [hasInternalGps]'s question. */
+    private fun readInternalGpsEnabled(): Boolean = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
 
     /** The short commit of the installed nightly, or null when this isn't a nightly build. */
     private fun installedSha(): String? =
