@@ -7,6 +7,9 @@ import de.codevoid.gpslog.data.RunReader
 import de.codevoid.gpslog.model.GpsRecord
 import org.xmlpull.v1.XmlSerializer
 import java.io.OutputStream
+import java.math.RoundingMode
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.time.Instant
 import java.util.Locale
 
@@ -29,15 +32,25 @@ object GpxExporter {
         s.attribute(null, "version", "1.1")
         s.attribute(null, "creator", "gpsLog")
         s.attribute(null, "xmlns", GPX_NS)
+        // Per export, not per object: DecimalFormat is not thread-safe and two shares can overlap.
+        // HALF_UP matches what String.format's %f produced.
+        val coord = DecimalFormat("0.0000000", DecimalFormatSymbols(Locale.US)).apply { roundingMode = RoundingMode.HALF_UP }
+        val ele = DecimalFormat("0.00", DecimalFormatSymbols(Locale.US)).apply { roundingMode = RoundingMode.HALF_UP }
         for (run in runs) {
-            writeTrack(s, run, filters)
+            writeTrack(s, run, filters, coord, ele)
         }
         s.endTag(null, "gpx")
         s.endDocument()
         s.flush()
     }
 
-    private fun writeTrack(s: XmlSerializer, run: RunInfo, filters: FilterSettings) {
+    private fun writeTrack(
+        s: XmlSerializer,
+        run: RunInfo,
+        filters: FilterSettings,
+        coord: DecimalFormat,
+        ele: DecimalFormat,
+    ) {
         val points = PointFilter.filter(
             RunReader.readAll(run.file),
             filters.accuracyMeters,
@@ -57,20 +70,20 @@ object GpxExporter {
                 s.startTag(null, "trkseg")
                 segOpen = true
             }
-            writePoint(s, p)
+            writePoint(s, p, coord, ele)
             prevTime = p.timeMillis
         }
         if (segOpen) s.endTag(null, "trkseg")
         s.endTag(null, "trk")
     }
 
-    private fun writePoint(s: XmlSerializer, p: GpsRecord) {
+    private fun writePoint(s: XmlSerializer, p: GpsRecord, coord: DecimalFormat, ele: DecimalFormat) {
         s.startTag(null, "trkpt")
-        s.attribute(null, "lat", String.format(Locale.US, "%.7f", p.latitude))
-        s.attribute(null, "lon", String.format(Locale.US, "%.7f", p.longitude))
+        s.attribute(null, "lat", coord.format(p.latitude))
+        s.attribute(null, "lon", coord.format(p.longitude))
         p.altitude?.let {
             s.startTag(null, "ele")
-            s.text(String.format(Locale.US, "%.2f", it))
+            s.text(ele.format(it))
             s.endTag(null, "ele")
         }
         s.startTag(null, "time")
