@@ -25,6 +25,9 @@ data class LoggingState(
 ) {
     /** The GNSS engine reports satellites used in its current fix only while it has one. */
     val hasFix: Boolean get() = satellitesUsedInFix > 0
+
+    /** The source stopped delivering; its satellite view means nothing until it is back. */
+    fun receiverStopped(): LoggingState = copy(gnssRunning = false, satellitesVisible = 0, satellitesUsedInFix = 0)
 }
 
 /**

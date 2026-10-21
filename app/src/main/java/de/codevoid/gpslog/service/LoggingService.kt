@@ -59,6 +59,14 @@ class LoggingService : Service(), FixSink {
     private lateinit var settings: SettingsStore
     private lateinit var runs: RunRepository
 
+    private val notificationManager by lazy { getSystemService(NotificationManager::class.java) }
+    private val tapIntent by lazy {
+        PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+    }
+    private val pauseAction by lazy { notificationAction(R.string.notif_action_pause, ACTION_PAUSE) }
+    private val resumeAction by lazy { notificationAction(R.string.notif_action_resume, ACTION_UNPAUSE) }
+    private val stopAction by lazy { notificationAction(R.string.notif_action_stop, ACTION_STOP) }
+
     @Volatile
     private var running = false
 
@@ -89,7 +97,7 @@ class LoggingService : Service(), FixSink {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                stopLogging()
+                handler.post { stopLogging(clearActive = true) }
                 return START_NOT_STICKY
             }
             // Guarded: these also arrive from the notification, which can outlive a dead run.
@@ -158,7 +166,7 @@ class LoggingService : Service(), FixSink {
             // gives up its marker. This path is reached from RESUME and the sticky restart too,
             // and at BOOT_COMPLETED the Bluetooth adapter is routinely not up yet — clearing
             // here ended a live multi-hour run the user never stopped, permanently.
-            stopLoggingInternal(clearActive = newRun)
+            stopLogging(clearActive = newRun)
             return
         }
         writer = RunWriter(file)
@@ -297,9 +305,7 @@ class LoggingService : Service(), FixSink {
         }
 
         override fun onStopped() {
-            LoggingStateHolder.update {
-                it.copy(gnssRunning = false, satellitesVisible = 0, satellitesUsedInFix = 0)
-            }
+            LoggingStateHolder.update { it.receiverStopped() }
         }
 
         override fun onSatelliteStatusChanged(status: GnssStatus) {
@@ -313,16 +319,7 @@ class LoggingService : Service(), FixSink {
     override fun onSourceEnabled(enabled: Boolean) {
         if (paused) return
         LoggingStateHolder.update {
-            if (enabled) {
-                it.copy(gpsEnabled = true)
-            } else {
-                it.copy(
-                    gpsEnabled = false,
-                    gnssRunning = false,
-                    satellitesVisible = 0,
-                    satellitesUsedInFix = 0,
-                )
-            }
+            if (enabled) it.copy(gpsEnabled = true) else it.receiverStopped().copy(gpsEnabled = false)
         }
         if (!enabled) updateNotification(getString(R.string.notif_receiver_off))
     }
@@ -343,11 +340,8 @@ class LoggingService : Service(), FixSink {
             writer?.flush()
             fixTimestampsNanos.clear()
             LoggingStateHolder.update {
-                it.copy(
+                it.receiverStopped().copy(
                     isPaused = true,
-                    gnssRunning = false,
-                    satellitesVisible = 0,
-                    satellitesUsedInFix = 0,
                     updateRateHz = 0f,
                     speedMetersPerSecond = null,
                     accuracyMeters = null,
@@ -460,15 +454,17 @@ class LoggingService : Service(), FixSink {
         }
     }
 
-    private fun stopLogging() {
-        handler.post { stopLoggingInternal(clearActive = true) }
-    }
-
-    private fun stopLoggingInternal(clearActive: Boolean) {
+    /** Releases what a run holds: the flush timer, the fix source and the writer. Logger thread only. */
+    private fun releaseRun() {
         handler.removeCallbacks(flushRunnable)
         stopSource()
         writer?.close()
         writer = null
+    }
+
+    /** Logger thread only. [clearActive] drops the resume marker; false keeps an interrupted run resumable. */
+    private fun stopLogging(clearActive: Boolean) {
+        releaseRun()
         running = false
         if (clearActive) settings.clearActiveRun()
         LoggingStateHolder.reset()
@@ -479,10 +475,9 @@ class LoggingService : Service(), FixSink {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(flushRunnable)
-        stopSource()
-        writer?.close()
-        writer = null
+        // Posted rather than run here: the run state is logger-thread-only, and quitSafely still
+        // delivers a message that is already due.
+        handler.post(::releaseRun)
         handlerThread.quitSafely()
         super.onDestroy()
     }
@@ -491,42 +486,33 @@ class LoggingService : Service(), FixSink {
         val channel = NotificationChannel(
             CHANNEL_ID, getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW,
         ).apply { setShowBadge(false) }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(channel)
     }
 
     /** [action] adds the matching Pause or Resume button; null builds the plain notification. */
     private fun buildNotification(text: String, action: String? = null): Notification {
-        val tap = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
-        )
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_stat_logging)
             .setOngoing(true)
-            .setContentIntent(tap)
-        if (action != null) {
-            val label = getString(
-                if (action == ACTION_UNPAUSE) R.string.notif_action_resume
-                else R.string.notif_action_pause
-            )
-            // No icon: the standard template does not draw action icons, and there is no
-            // transport-control drawable in the project worth adding for one that is never shown.
-            builder.addAction(
-                Notification.Action.Builder(null as Icon?, label, serviceIntent(action)).build()
-            )
-        }
+            .setContentIntent(tapIntent)
+        if (action != null) builder.addAction(if (action == ACTION_UNPAUSE) resumeAction else pauseAction)
         // Stop is always offered, after the toggle so the Pause/Resume slot never moves. It asks
         // nothing, like the in-app Stop: a mis-tap loses no data and Merge rejoins the halves.
-        builder.addAction(
-            Notification.Action.Builder(
-                null as Icon?, getString(R.string.notif_action_stop), serviceIntent(ACTION_STOP),
-            ).build()
-        )
+        builder.addAction(stopAction)
         return builder.build()
     }
 
-    /** Distinct request codes so the Pause and Resume intents cannot overwrite each other. */
+    /**
+     * Built once per action and reused by every update: the intents are immutable with constant
+     * extras, so minting them per update was three Binder round trips for nothing. No icon: the
+     * standard template does not draw action icons. Distinct request codes keep the three intents
+     * from overwriting each other.
+     */
+    private fun notificationAction(label: Int, action: String): Notification.Action =
+        Notification.Action.Builder(null as Icon?, getString(label), serviceIntent(action)).build()
+
     private fun serviceIntent(action: String): PendingIntent = PendingIntent.getService(
         this,
         action.hashCode(),
@@ -536,10 +522,7 @@ class LoggingService : Service(), FixSink {
 
     /** Logger thread only — it reads [paused] to decide which action the notification offers. */
     private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
-            buildNotification(text, if (paused) ACTION_UNPAUSE else ACTION_PAUSE),
-        )
+        notificationManager.notify(NOTIF_ID, buildNotification(text, if (paused) ACTION_UNPAUSE else ACTION_PAUSE))
     }
 
     companion object {
