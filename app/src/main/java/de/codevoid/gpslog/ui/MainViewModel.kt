@@ -254,7 +254,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The active run cannot be deleted or merged while it is being written to. */
-    private fun activeRunId(): Long? = loggingState.value.let { if (it.isLogging) it.runId else null }
+    private fun activeRunId(): Long? = loggingState.value.runId
 
     /** Ids in the current selection that may be modified (everything except the active run). */
     private fun deletableSelection(selected: Set<Long>): Set<Long> = selected - setOfNotNull(activeRunId())
@@ -315,8 +315,7 @@ data class DebugLog(val file: File, val capturedMillis: Long)
 /** The run being logged, reduced to what the shell and the Runs list display. */
 data class ActiveRun(val id: Long, val paused: Boolean)
 
-private fun LoggingState.toActiveRun(): ActiveRun? =
-    if (isLogging) runId?.let { ActiveRun(it, isPaused) } else null
+private fun LoggingState.toActiveRun(): ActiveRun? = runId?.let { ActiveRun(it, isPaused) }
 
 /** Preview of the current export selection after filters, surfaced on the Export surface. */
 sealed interface ExportPreview {

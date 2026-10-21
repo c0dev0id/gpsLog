@@ -22,7 +22,6 @@ class RecordStatusTest {
         gnssRunning: Boolean = false,
         used: Int = 0,
     ) = LoggingState(
-        isLogging = true,
         runId = 1L,
         isPaused = paused,
         gpsEnabled = gpsEnabled,

@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.update
 
 /** Live state of the current logging run, mirrored to the UI. */
 data class LoggingState(
-    val isLogging: Boolean = false,
     val runId: Long? = null,
     val startTimeMillis: Long? = null,
     val pointCount: Long = 0,
@@ -23,6 +22,9 @@ data class LoggingState(
     val satellitesUsedInFix: Int = 0,
     val isPaused: Boolean = false,
 ) {
+    /** A run is in progress exactly while it has an id. */
+    val isLogging: Boolean get() = runId != null
+
     /** The GNSS engine reports satellites used in its current fix only while it has one. */
     val hasFix: Boolean get() = satellitesUsedInFix > 0
 

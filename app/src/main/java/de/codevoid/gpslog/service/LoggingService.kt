@@ -172,7 +172,6 @@ class LoggingService : Service(), FixSink {
         writer = RunWriter(file)
         LoggingStateHolder.set(
             LoggingState(
-                isLogging = true,
                 runId = id,
                 startTimeMillis = startTimeMillis,
                 pointCount = pointCount,
