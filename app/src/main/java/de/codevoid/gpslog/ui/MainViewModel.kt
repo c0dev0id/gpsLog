@@ -13,6 +13,7 @@ import de.codevoid.gpslog.export.PointFilter
 import de.codevoid.gpslog.service.LoggingService
 import de.codevoid.gpslog.service.LoggingState
 import de.codevoid.gpslog.service.LoggingStateHolder
+import de.codevoid.gpslog.service.NmeaDebugLog
 import de.codevoid.gpslog.update.Nightly
 import de.codevoid.gpslog.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
@@ -234,7 +235,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** IO thread: the timestamp is read here, once, so the UI never touches the file itself. */
     private fun newestDebugLog(): DebugLog? =
-        File(getApplication<Application>().cacheDir, "debug")
+        NmeaDebugLog.dir(getApplication())
             .listFiles()
             ?.filter { it.isFile }
             ?.map { DebugLog(it, it.lastModified()) }

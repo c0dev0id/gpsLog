@@ -109,18 +109,16 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private val packageUri: Uri get() = Uri.parse("package:$packageName")
+
     private fun requestBatteryExemption() {
         val pm = getSystemService(PowerManager::class.java)
         if (pm.isIgnoringBatteryOptimizations(packageName)) return
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            .setData(Uri.parse("package:$packageName"))
-        runCatching { startActivity(intent) }
+        runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(packageUri)) }
     }
 
     private fun openAppSettings() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            .setData(Uri.parse("package:$packageName"))
-        runCatching { startActivity(intent) }
+        runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(packageUri)) }
     }
 
     /**
@@ -130,14 +128,11 @@ class MainActivity : ComponentActivity() {
      */
     private fun installUpdate(file: File) {
         if (!packageManager.canRequestPackageInstalls()) {
-            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                .setData(Uri.parse("package:$packageName"))
-            runCatching { startActivity(intent) }
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).setData(packageUri)) }
             return
         }
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
+            setDataAndType(contentUri(file), "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { startActivity(intent) }
@@ -145,31 +140,25 @@ class MainActivity : ComponentActivity() {
 
     private fun exportForShare() {
         val dir = File(cacheDir, "exports").apply { mkdirs() }
-        val file = File(dir, suggestedName())
-        vm.export(file.outputStream()) {
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = MIME_GPX
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(send, "Share GPX"))
-        }
+        val file = File(dir, "gpslog-${FILE_FMT.format(Instant.now())}.gpx")
+        vm.export(file.outputStream()) { share(file, MIME_GPX, "Share GPX") }
     }
 
     private fun shareDebugLog() {
         val file = vm.latestDebugLog.value?.file ?: return
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = MIME_TEXT
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(send, "Share debug log"))
+        share(file, MIME_TEXT, "Share debug log")
     }
 
-    private fun suggestedName(): String =
-        "gpslog-${FILE_FMT.format(Instant.now())}.gpx"
+    private fun share(file: File, mime: String, title: String) {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, contentUri(file))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, title))
+    }
+
+    private fun contentUri(file: File): Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
 
     private companion object {
         const val MIME_GPX = "application/gpx+xml"

@@ -224,7 +224,7 @@ class LoggingService : Service(), FixSink {
             return false
         }
         val debugFile = if (settings.debugLogging.value) {
-            File(File(cacheDir, "debug").apply { mkdirs() }, "nmea-$runId.log")
+            File(NmeaDebugLog.dir(this).apply { mkdirs() }, "nmea-$runId.log")
         } else {
             null
         }

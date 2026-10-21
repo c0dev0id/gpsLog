@@ -1,5 +1,6 @@
 package de.codevoid.gpslog.service
 
+import android.content.Context
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -34,8 +35,11 @@ class NmeaDebugLog(file: File) {
         runCatching { writer.flush(); writer.close() }
     }
 
-    private companion object {
-        val TIME_FMT: DateTimeFormatter =
+    companion object {
+        /** The one directory for captured logs, for the writer in the service and the reader in the ViewModel. */
+        fun dir(context: Context): File = File(context.cacheDir, "debug")
+
+        private val TIME_FMT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneId.systemDefault())
     }
 }
