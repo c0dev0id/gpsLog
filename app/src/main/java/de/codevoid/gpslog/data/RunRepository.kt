@@ -28,7 +28,7 @@ class RunRepository(private val runsDir: File) {
     /**
      * Combines several runs into one. All points are read, merged in time order and written to a
      * temp file that then replaces the earliest run's file; the other originals are deleted. The
-     * temp-then-rename keeps the originals intact until the merged file is complete and fsync'd, so
+     * temp-then-rename keeps the originals intact until the merged file is complete, so
      * a crash mid-merge loses nothing. Returns the id of the merged run, or null if fewer than two
      * runs actually held data. Runs the same [RunWriter]/[RunReader] codec path as normal logging.
      */
@@ -53,10 +53,15 @@ class RunRepository(private val runsDir: File) {
         val files = runsDir.listFiles { f -> f.isFile && f.name.endsWith(".dat") } ?: return emptyList()
         return files.mapNotNull { file ->
             val id = file.nameWithoutExtension.toLongOrNull() ?: return@mapNotNull null
-            val count = RunReader.pointCount(file)
-            val start = RunReader.firstRecord(file)?.timeMillis ?: id
-            val end = RunReader.lastRecord(file)?.timeMillis ?: start
-            RunInfo(id = id, file = file, startTimeMillis = start, endTimeMillis = end, pointCount = count)
+            val summary = RunReader.summary(file)
+            val start = summary.first?.timeMillis ?: id
+            RunInfo(
+                id = id,
+                file = file,
+                startTimeMillis = start,
+                endTimeMillis = summary.last?.timeMillis ?: start,
+                pointCount = summary.pointCount,
+            )
         }.sortedByDescending { it.id }
     }
 }

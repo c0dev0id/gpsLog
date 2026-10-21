@@ -1,6 +1,7 @@
 package de.codevoid.gpslog.data
 
 import de.codevoid.gpslog.model.GpsRecord
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -13,14 +14,13 @@ import java.io.RandomAccessFile
  */
 class RunWriter(private val file: File) {
 
-    private val buffer = ArrayList<ByteArray>()
+    private val buffer = ByteArrayOutputStream()
 
     init {
         file.parentFile?.mkdirs()
         if (!file.exists() || file.length() == 0L) {
             FileOutputStream(file).use { fos ->
                 fos.write(RunCodec.header())
-                fos.flush()
                 fos.fd.sync()
             }
         }
@@ -28,18 +28,15 @@ class RunWriter(private val file: File) {
 
     @Synchronized
     fun append(record: GpsRecord) {
-        buffer.add(RunCodec.encodeRecord(record))
+        buffer.write(RunCodec.encodeRecord(record))
     }
 
-    /** Write everything buffered so far to the OS page cache. No-op when the buffer is empty. */
+    /** Write everything buffered so far to the OS page cache in one call. No-op when the buffer is empty. */
     @Synchronized
     fun flush() {
-        if (buffer.isEmpty()) return
-        FileOutputStream(file, true).use { fos ->
-            for (bytes in buffer) fos.write(bytes)
-            fos.flush()
-        }
-        buffer.clear()
+        if (buffer.size() == 0) return
+        FileOutputStream(file, true).use { buffer.writeTo(it) }
+        buffer.reset()
     }
 
     @Synchronized
@@ -49,44 +46,47 @@ class RunWriter(private val file: File) {
 /** Read-only access to a run file. A torn trailing partial record is ignored throughout. */
 object RunReader {
 
-    fun pointCount(file: File): Long = RunCodec.recordCount(file.length())
+    /** What the run list and a resuming service need, read from one open of the file. */
+    class Summary(val pointCount: Long, val first: GpsRecord?, val last: GpsRecord?)
 
-    fun firstRecord(file: File): GpsRecord? = recordAt(file, 0)
-
-    fun lastRecord(file: File): GpsRecord? {
+    fun summary(file: File): Summary {
         val count = RunCodec.recordCount(file.length())
-        if (count <= 0) return null
-        return recordAt(file, count - 1)
+        if (count <= 0) return Summary(0, null, null)
+        RandomAccessFile(file, "r").use { raf ->
+            val first = recordAt(raf, 0)
+            val last = if (count == 1L) first else recordAt(raf, count - 1)
+            return Summary(count, first, last)
+        }
     }
 
-    /** Load every whole record. Used at export time; one run at a time. */
+    /** Load every whole record, validating the header. Used at export time; one run at a time. */
     fun readAll(file: File): List<GpsRecord> {
         val count = RunCodec.recordCount(file.length())
         if (count <= 0) return emptyList()
-        val result = ArrayList<GpsRecord>(count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        val result = ArrayList<GpsRecord>(count.toInt())
         RandomAccessFile(file, "r").use { raf ->
             val header = ByteArray(RunCodec.HEADER_SIZE)
             raf.readFully(header)
             RunCodec.readHeader(header)
-            val buf = ByteArray(RunCodec.RECORD_SIZE)
-            var i = 0L
-            while (i < count) {
-                raf.readFully(buf)
-                result.add(RunCodec.decodeRecord(buf))
-                i++
+            // One read per chunk, not per record.
+            val chunk = ByteArray(RunCodec.RECORD_SIZE * READ_CHUNK_RECORDS)
+            var remaining = count
+            while (remaining > 0) {
+                val n = remaining.coerceAtMost(READ_CHUNK_RECORDS.toLong()).toInt()
+                raf.readFully(chunk, 0, n * RunCodec.RECORD_SIZE)
+                for (i in 0 until n) result.add(RunCodec.decodeRecord(chunk, i * RunCodec.RECORD_SIZE))
+                remaining -= n
             }
         }
         return result
     }
 
-    private fun recordAt(file: File, index: Long): GpsRecord? {
-        val count = RunCodec.recordCount(file.length())
-        if (index < 0 || index >= count) return null
-        RandomAccessFile(file, "r").use { raf ->
-            raf.seek(RunCodec.HEADER_SIZE + index * RunCodec.RECORD_SIZE)
-            val buf = ByteArray(RunCodec.RECORD_SIZE)
-            raf.readFully(buf)
-            return RunCodec.decodeRecord(buf)
-        }
+    private fun recordAt(raf: RandomAccessFile, index: Long): GpsRecord {
+        raf.seek(RunCodec.HEADER_SIZE + index * RunCodec.RECORD_SIZE)
+        val buf = ByteArray(RunCodec.RECORD_SIZE)
+        raf.readFully(buf)
+        return RunCodec.decodeRecord(buf)
     }
+
+    private const val READ_CHUNK_RECORDS = 1024
 }

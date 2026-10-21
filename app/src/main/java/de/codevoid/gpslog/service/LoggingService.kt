@@ -68,7 +68,6 @@ class LoggingService : Service(), FixSink {
     private var bluetoothSource: BluetoothNmeaSource? = null
     private var debugLog: NmeaDebugLog? = null
     private var runId: Long = -1L
-    private var startTimeMillis: Long = 0L
     private var pointCount: Long = 0
     private val fixTimestampsNanos = ArrayDeque<Long>()
     private var lastUiUpdateMs = 0L
@@ -144,8 +143,9 @@ class LoggingService : Service(), FixSink {
     private fun startLogging(id: Long, newRun: Boolean) {
         val file = runs.runFile(id)
         runId = id
-        pointCount = RunReader.pointCount(file)
-        startTimeMillis = RunReader.firstRecord(file)?.timeMillis ?: id
+        val summary = RunReader.summary(file)
+        pointCount = summary.pointCount
+        val startTimeMillis = summary.first?.timeMillis ?: id
         fixTimestampsNanos.clear()
         lastUiUpdateMs = 0L
         lastNotifUpdateMs = 0L

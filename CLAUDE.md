@@ -220,8 +220,9 @@ length. There is no end marker, so a graceful stop and a crash produce
 identical files.
 
 `data/RunFile` holds `RunWriter` (buffer + flush; the header is the one thing
-fsync'd, once, at creation) and `RunReader` (`pointCount`/`firstRecord`/`lastRecord`
-seek without validating the header; `readAll` validates it and loads everything).
+fsync'd, once, at creation) and `RunReader` (`summary` seeks the point count and the first and
+last record from one open without validating the header; `readAll` validates it
+and loads everything in 1024-record chunks).
 `data/RunRepository` is plain filesystem listing/deletion plus `merge`, which
 reads the selected runs, concatenates and time-sorts the points and rewrites them
 through the normal `RunWriter` codec path into a `.dat.tmp`, then deletes the
