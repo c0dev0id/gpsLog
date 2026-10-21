@@ -32,7 +32,7 @@ class NmeaDebugLog(file: File) {
     }
 
     fun close() {
-        runCatching { writer.flush(); writer.close() }
+        runCatching { writer.close() }
     }
 
     companion object {

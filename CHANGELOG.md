@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All status updates (UI state and notification) throttled to 2 s; UI state updates are skipped entirely when the app is in background — no allocations or Compose recompositions during background recording
 - Bluetooth satellite status posts throttled to 2 s regardless of how frequently GSV sentences arrive (was effectively ~12/s at 4 Hz with 3 constellation talkers)
 - A disconnected Bluetooth receiver is retried with a backoff from 3 s up to 60 s instead of every 3 s indefinitely, so a receiver switched off or left behind no longer wakes the radio continuously for the rest of the run. Reconnection is still immediate in practice: the app is notified the moment the receiver comes back in range
+- The export preview and Share GPX read run files in bulk and format coordinates with a reusable formatter, so long runs export noticeably faster
 
 ### Added
 - GPS logging foreground service recording raw `GPS_PROVIDER` fixes at the chipset's native rate, logging every field the fix offers (position, time, altitude, accuracy, speed, bearing and their accuracies)

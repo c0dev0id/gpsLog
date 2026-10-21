@@ -40,7 +40,6 @@ class NmeaParser {
         val body = validate(line) ?: return current(null)
         val fields = body.split(',')
         val id = fields[0]
-        if (id.length < 3) return current(null)
         return when (id.takeLast(3)) {
             "GGA" -> { parseGga(fields); current(null) }
             "GSV" -> { parseGsv(fields, id.dropLast(3)); current(null) }
