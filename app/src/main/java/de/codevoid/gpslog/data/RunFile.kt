@@ -31,9 +31,6 @@ class RunWriter(private val file: File) {
         buffer.add(RunCodec.encodeRecord(record))
     }
 
-    @Synchronized
-    fun bufferedCount(): Int = buffer.size
-
     /** Write everything buffered so far to the OS page cache. No-op when the buffer is empty. */
     @Synchronized
     fun flush() {

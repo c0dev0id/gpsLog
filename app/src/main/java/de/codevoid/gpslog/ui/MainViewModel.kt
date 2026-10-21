@@ -296,7 +296,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Streams the runs the Export page is open for as one GPX document to [out], closing it when done. Runs on IO;
      * [onDone] is invoked on the main thread afterwards (used to fire the share intent).
      */
-    fun export(out: OutputStream, onDone: () -> Unit = {}) {
+    fun export(out: OutputStream, onDone: () -> Unit) {
         val ids = _exportTarget.value
         val current = _runs.value.filter { it.id in ids }
         val filterSnapshot = filters.value

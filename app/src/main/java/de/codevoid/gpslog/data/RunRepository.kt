@@ -21,8 +21,6 @@ class RunRepository(private val runsDir: File) {
         runsDir.mkdirs()
     }
 
-    fun newRunFile(startMillis: Long): File = File(runsDir, "$startMillis.dat")
-
     fun runFile(id: Long): File = File(runsDir, "$id.dat")
 
     fun delete(id: Long): Boolean = runFile(id).delete()

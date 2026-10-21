@@ -78,7 +78,6 @@ object UpdateChecker {
 
     private fun open(url: String): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
             instanceFollowRedirects = true
             // GitHub rejects requests without a User-Agent with 403.
             setRequestProperty("User-Agent", USER_AGENT)
