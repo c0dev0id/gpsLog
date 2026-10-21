@@ -62,40 +62,23 @@ object PointFilter {
         var i = 1
         val n = points.size
         while (i < n) {
-            var best: GpsRecord? = null
-            var bestIdx = -1
             var k = i
-            while (k < n && points[k].timeMillis <= nextTick) {
-                best = points[k]
-                bestIdx = k
-                k++
-            }
-            val after = if (k < n) points[k] else null
-
-            val chosen: GpsRecord
-            val chosenIdx: Int
-            when {
-                best == null && after == null -> return out
-                best == null -> {
-                    chosen = after!!
-                    chosenIdx = k
-                }
-                after == null -> {
-                    chosen = best
-                    chosenIdx = bestIdx
-                }
+            while (k < n && points[k].timeMillis <= nextTick) k++
+            // points[before] is the last point at or before the tick (none when before < i);
+            // points[k] is the first one after it (none when k == n). Not both can be missing.
+            val before = k - 1
+            val chosenIdx = when {
+                before < i -> k
+                k == n -> before
                 else -> {
-                    val distBefore = nextTick - best.timeMillis
-                    val distAfter = after.timeMillis - nextTick
-                    if (distBefore < distAfter || (distBefore == distAfter && accuracyAtLeastAsGood(best, after))) {
-                        chosen = best
-                        chosenIdx = bestIdx
-                    } else {
-                        chosen = after
-                        chosenIdx = k
-                    }
+                    val distBefore = nextTick - points[before].timeMillis
+                    val distAfter = points[k].timeMillis - nextTick
+                    if (distBefore < distAfter ||
+                        (distBefore == distAfter && accuracyAtLeastAsGood(points[before], points[k]))
+                    ) before else k
                 }
             }
+            val chosen = points[chosenIdx]
             out.add(chosen)
             nextTick = chosen.timeMillis + intervalMs
             i = chosenIdx + 1
